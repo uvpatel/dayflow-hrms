@@ -20,13 +20,13 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { SignOutButton, UserButton } from "@clerk/nextjs"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import { SignOutButton, useUser } from "@clerk/nextjs"
+import { EllipsisVerticalIcon, CircleUserRoundIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
 
 export function NavUser({
-  user,
+  username,
 }: {
-  user: {
+  username: {
     name: string
     email: string
     avatar: string
@@ -34,7 +34,7 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
 
-
+  const { user } = useUser()
 
   return (
     <SidebarMenu>
@@ -45,18 +45,20 @@ export function NavUser({
               <SidebarMenuButton size="lg" className="aria-expanded:bg-muted" />
             }
           >
-            <Avatar>
-              <AvatarImage src={user.avatar} alt={user.name} />
-              <UserButton />
+            <Avatar className="size-8 rounded-lg grayscale">
+              <AvatarImage src={user?.imageUrl} alt="useravatar" />
+              <AvatarFallback className="rounded-lg">{user?.firstName?.charAt(0)}</AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{user.name}</span>
-              <span className="truncate text-xs">{user.email}</span>
+              <span className="truncate font-medium">{user?.firstName} {user?.lastName}</span>
+              <span className="truncate text-xs text-foreground/70">
+                {user?.emailAddresses?.[0]?.emailAddress}
+              </span>
             </div>
-            <ChevronsUpDownIcon className="ml-auto size-4" />
+            <EllipsisVerticalIcon className="ml-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-fit"
+            className="min-w-56"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
@@ -64,13 +66,15 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <Avatar>
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <UserButton />
+                  <Avatar className="size-8">
+                    <AvatarImage src={user?.imageUrl} alt="useravatar" />
+                    <AvatarFallback className="rounded-lg">{user?.firstName?.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{user.name}</span>
-                    <span className="truncate text-xs">{user.email}</span>
+                    <span className="truncate font-medium">{user?.firstName} {user?.lastName}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {user?.emailAddresses?.[0]?.emailAddress}
+                    </span>
                   </div>
                 </div>
               </DropdownMenuLabel>
@@ -78,15 +82,7 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem>
-                <SparklesIcon
-                />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheckIcon
+                <CircleUserRoundIcon
                 />
                 Account
               </DropdownMenuItem>
@@ -104,7 +100,10 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuItem>
               <SignOutButton />
-             
+               
+                Log out
+              
+          
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
