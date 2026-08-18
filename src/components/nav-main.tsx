@@ -55,6 +55,8 @@ export function NavMain({
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+        <h1>Organization</h1>
+        
       </SidebarGroupContent>
     </SidebarGroup>
   )

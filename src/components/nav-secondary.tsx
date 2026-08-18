@@ -34,6 +34,7 @@ export function NavSecondary({
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
+        
       </SidebarGroupContent>
     </SidebarGroup>
   )
