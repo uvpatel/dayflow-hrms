@@ -26,44 +26,52 @@ const data = {
   navMain: [
     {
       title: "Dashboard",
-      url: "#",
+      url: "/dashboard",
       icon: (
         <LayoutDashboardIcon
         />
       ),
     },
     {
-      title: "Lifecycle",
-      url: "#",
+      title: "Organization",
+      url: "/dashboard/organization",
       icon: (
         <ListIcon
         />
       ),
     },
     {
-      title: "Analytics",
-      url: "#",
+      title: "departments",
+      url: "/dashboard/departments",
       icon: (
         <ChartBarIcon
         />
       ),
     },
     {
-      title: "Projects",
-      url: "#",
+      title: "designations",
+      url: "/dashboard/designations",
       icon: (
         <FolderIcon
-        />
+        />  
       ),
     },
     {
-      title: "Team",
-      url: "#",
+      title: "officeLocations",
+      url: "/dashboard/officeLocations",
       icon: (
         <UsersIcon
         />
       ),
     },
+    {
+      title: "holiday",
+      url: "/dashboard/holiday",
+      icon: (
+        <UsersIcon
+        />
+      ),
+    }
   ],
   navClouds: [
     {
@@ -197,7 +205,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser username={data.user} />
       </SidebarFooter>
     </Sidebar>
   )

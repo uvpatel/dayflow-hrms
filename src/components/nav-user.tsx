@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sidebar"
 import { SignOutButton, useUser } from "@clerk/nextjs"
 import { EllipsisVerticalIcon, CircleUserRoundIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import Link from "next/link"
 
 export function NavUser({
   username,
@@ -84,17 +85,17 @@ export function NavUser({
               <DropdownMenuItem>
                 <CircleUserRoundIcon
                 />
-                Account
+               <Link href="/account">Account</Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <CreditCardIcon
                 />
-                Billing
-              </DropdownMenuItem>
+               <Link href="/billing"> Billing</Link>
+              </DropdownMenuItem> 
               <DropdownMenuItem>
                 <BellIcon
                 />
-                Notifications
+               <Link href="/notifications">Notifications </Link> 
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
