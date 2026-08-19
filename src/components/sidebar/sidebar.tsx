@@ -60,91 +60,75 @@ const data = {
   navMain: [
     {
       title: "People",
-      url: "/platform/people",
+      url: "/dashboard/people",
       icon: Users,
       isActive: true,
       items: [
-        { title: "Directory", url: "/platform/people" },
-        { title: "Onboarding", url: "/platform/people/onboarding" },
-        { title: "Profile", url: "/platform/people/profile" },
+        { title: "Directory", url: "/dashboard/people" },
+        { title: "Onboarding", url: "/dashboard/people/onboarding" },
+        { title: "Profile", url: "/dashboard/people/profile" },
       ],
     },
     {
       title: "Attendance",
-      url: "/platform/attendance",
+      url: "/dashboard/attendance",
       icon: CalendarCheck,
       items: [
-        { title: "Daily View", url: "/platform/attendance/daily" },
-        { title: "Weekly View", url: "/platform/attendance/weekly" },
-        { title: "Regularization", url: "/platform/attendance/regularize" },
+        { title: "Daily View", url: "/dashboard/attendance/daily" },
+        { title: "Weekly View", url: "/dashboard/attendance/weekly" },
+        { title: "Regularization", url: "/dashboard/attendance/regularize" },
       ],
     },
     {
       title: "Time Off",
-      url: "/platform/time-off",
+      url: "/dashboard/time-off",
       icon: CalendarClock,
       items: [
-        { title: "My Requests", url: "/platform/time-off" },
-        { title: "Apply", url: "/platform/time-off/apply" },
-        { title: "Leave Balance", url: "/platform/time-off/balance" },
+        { title: "My Requests", url: "/dashboard/time-off" },
+        { title: "Apply", url: "/dashboard/time-off/apply" },
+        { title: "Leave Balance", url: "/dashboard/time-off/balance" },
       ],
     },
     {
       title: "Approvals",
-      url: "/platform/approvals",
+      url: "/dashboard/approvals",
       icon: CheckCircle2,
       items: [
-        { title: "Leave Requests", url: "/platform/approvals/leave" },
-        { title: "Attendance Corrections", url: "/platform/approvals/attendance" },
+        { title: "Leave Requests", url: "/dashboard/approvals/leave" },
+        { title: "Attendance Corrections", url: "/dashboard/approvals/attendance" },
       ],
     },
     {
       title: "Payroll",
-      url: "/platform/payroll",
+      url: "/dashboard/payroll",
       icon: Wallet,
       items: [
-        { title: "My Payslips", url: "/platform/payroll" },
-        { title: "Salary Structure", url: "/platform/payroll/structure" },
+        { title: "My Payslips", url: "/dashboard/payroll" },
+        { title: "Salary Structure", url: "/dashboard/payroll/structure" },
       ],
     },
     {
       title: "Organization",
-      url: "/platform/organization",
+      url: "/dashboard/organization",
       icon: Building2,
       items: [
-        { title: "Departments", url: "/platform/organization/departments" },
-        { title: "Roles", url: "/platform/organization/roles" },
-        { title: "Holidays", url: "/platform/organization/holidays" },
+        { title: "Departments", url: "/dashboard/organization/departments" },
+        { title: "Roles", url: "/dashboard/organization/roles" },
+        { title: "Holidays", url: "/dashboard/organization/holidays" },
       ],
     },
     {
       title: "Settings",
-      url: "/platform/settings",
+      url: "/dashboard/settings",
       icon: Settings2,
       items: [
-        { title: "General", url: "/platform/settings" },
-        { title: "Team", url: "/platform/settings/team" },
-        { title: "Billing", url: "/platform/settings/billing" },
+        { title: "General", url: "/dashboard/settings" },
+        { title: "Team", url: "/dashboard/settings/team" },
+        { title: "Billing", url: "/dashboard/settings/billing" },
       ],
     },
   ],
-  projects: [
-    {
-      name: "Quick Attendance",
-      url: "/platform/attendance/daily",
-      icon: LayoutDashboard,
-    },
-    {
-      name: "Apply Leave",
-      url: "/platform/time-off/apply",
-      icon: UserPlus,
-    },
-    {
-      name: "My Payslip",
-      url: "/platform/payroll",
-      icon: FileText,
-    },
-  ],
+ 
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -155,10 +139,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
+       
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser username={data.user} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

@@ -2,12 +2,20 @@ import { AppSidebar } from "@/components/main/app-sidebar"
 import { ChartAreaInteractive } from "@/components/main/chart-area-interactive"
 import { DataTable } from "@/components/main/data-table"
 import { SectionCards } from "@/components/main/section-cards"
+import { SiteHeader } from "@/components/main/site-header"
+import {
+  SidebarInset,
+  SidebarProvider,
+} from "@/components/ui/sidebar"
 
 import data from "./data.json"
 
 export default function Page() {
   return (
-   
+    
+     
+      <SidebarInset>
+        <SiteHeader />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
@@ -19,6 +27,7 @@ export default function Page() {
             </div>
           </div>
         </div>
-      
+      </SidebarInset>
+    
   )
 }

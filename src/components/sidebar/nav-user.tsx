@@ -29,19 +29,22 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { SignOutButton } from "@clerk/nextjs"
+import { SignOutButton, useUser } from "@clerk/nextjs"
+import Link from "next/link"
 
 
 export function NavUser({
-  user,
+  username,
 }: {
-  user: {
+  username: {
     name: string
     email: string
     avatar: string
   }
 }) {
   const { isMobile } = useSidebar()
+
+const { isLoaded, isSignedIn, user } = useUser();
 
   return (
     <SidebarMenu>
@@ -53,12 +56,12 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarImage src={user?.imageUrl} alt="username" />
                 <AvatarFallback className="rounded-lg">CN</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs">{user.email}</span>
+                <span className="truncate font-medium">{user?.fullName}</span>
+                <span className="truncate text-xs">{user?.emailAddresses[0]?.emailAddress}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -72,12 +75,12 @@ export function NavUser({
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
+                  <AvatarImage src={user?.imageUrl} alt="username" />
                   <AvatarFallback className="rounded-lg">CN</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user.name}</span>
-                  <span className="truncate text-xs">{user.email}</span>
+                  <span className="truncate font-medium">{user?.fullName}</span>
+                  <span className="truncate text-xs">{user?.emailAddresses[0]?.emailAddress}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -92,21 +95,22 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem>
                 <BadgeCheck />
-                Account
+                <Link href="/account">Account</Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <CreditCard />
-                Billing
+                <Link href="/billing">Billing</Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Bell />
-                Notifications
+                <Link href="/notifications">Notifications</Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
               <SignOutButton />
-             
+              <Link href="/sign-out">Sign Out</Link>
+
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
