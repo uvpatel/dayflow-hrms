@@ -3,8 +3,11 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider, Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider } from "@/app/providers/theme-provider";
 import { ModeToggle } from "@/components/toggler";
+import { dark, neobrutalism } from '@clerk/ui/themes'
+import Link from "next/link";
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +24,7 @@ export const metadata: Metadata = {
   description: "Dayflow is Human Resource Management System for your company",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   const today = new Date();
 
   return (
@@ -38,14 +41,25 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             enableSystem
             disableTransitionOnChange
           >
-            <ClerkProvider>
+            <ClerkProvider
+            appearance={{
+             
+              signIn: { theme: neobrutalism },
+    options: {
+  
+      socialButtonsPlacement: 'bottom',
+      socialButtonsVariant: 'iconButton',
+      termsPageUrl: 'https://clerk.com/terms',
+    },
+  }}
+            >
           <header className="flex justify-end items-center p-4 gap-4 h-16">
             <Show when="signed-out">
               <SignInButton />
               <SignUpButton>
                
                 <button className="bg-[#6c47ff] text-white rounded-full font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 cursor-pointer">
-                  Sign Up
+                 <Link href="/sign-up">Sign Up</Link>pa
                 </button>
               </SignUpButton>
             </Show>
