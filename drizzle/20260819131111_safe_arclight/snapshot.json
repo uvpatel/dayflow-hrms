@@ -1,0 +1,65 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "beebbc2a-61b8-47ff-af3d-ec398a99b1b6",
+  "prevIds": [
+    "2b485d33-f7c8-4e4d-80d7-eefc2616bf5d"
+  ],
+  "ddl": [
+    {
+      "values": [
+        "present",
+        "absent",
+        "half_day",
+        "leave",
+        "holiday"
+      ],
+      "name": "attendance_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "onboarding",
+        "active",
+        "notice_period",
+        "inactive"
+      ],
+      "name": "employee_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "full_time",
+        "part_time",
+        "contract",
+        "intern"
+      ],
+      "name": "employment_type",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "pending",
+        "approved",
+        "rejected",
+        "cancelled"
+      ],
+      "name": "leave_request_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "full_day",
+        "half_day"
+      ],
+      "name": "leave_unit",
+      "entityType": "enums",
+      "schema": "public"
+    }
+  ],
+  "renames": []
+}
