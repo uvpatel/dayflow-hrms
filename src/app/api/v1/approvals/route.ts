@@ -1,18 +1,15 @@
+import { db } from "@/db/index";
 import { NextRequest, NextResponse } from "next/server";
+import { approvalRequests } from "@/db/schema/approval-requests";
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get("type"); // LEAVE, ATTENDANCE, EXPENSE, etc.
-    const status = searchParams.get("status"); // PENDING, APPROVED, REJECTED
-    const page = Number(searchParams.get("page") ?? 1);
-    const limit = Number(searchParams.get("limit") ?? 10);
-
+    
+    const approvals = db.select().from(approvalRequests);
     return NextResponse.json({
       success: true,
       message: "Approval requests fetched successfully",
-      data: [],
-      meta: { type, status, page, limit, total: 0 },
+      data: approvals
     });
   } catch (error) {
     return NextResponse.json(

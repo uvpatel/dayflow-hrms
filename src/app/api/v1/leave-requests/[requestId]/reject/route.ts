@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { leaveRequests } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 type RouteParams = {
   params: Promise<{ requestId: string }>;
@@ -7,17 +10,35 @@ type RouteParams = {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const { requestId } = await params;
-    const body = await request.json().catch(() => ({}));
+    const id = Number(requestId);
+
+    if (isNaN(id)) {
+      return NextResponse.json(
+        { success: false, error: "Invalid leave request ID" },
+        { status: 400 }
+      );
+    }
+
+    const [updated] = await db
+      .update(leaveRequests)
+      .set({
+        status: "rejected",
+        updatedAt: new Date(),
+      })
+      .where(eq(leaveRequests.id, id))
+      .returning();
+
+    if (!updated) {
+      return NextResponse.json(
+        { success: false, error: "Leave request not found" },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: `Leave request ${requestId} rejected`,
-      data: {
-        id: requestId,
-        status: "REJECTED",
-        rejectedAt: new Date().toISOString(),
-        rejectionReason: body?.reason ?? "No reason provided",
-      },
+      message: `Leave request ${id} rejected successfully`,
+      data: updated,
     });
   } catch (error) {
     return NextResponse.json(
@@ -28,5 +49,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
+  return POST(request, { params });
+}
+
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   return POST(request, { params });
 }

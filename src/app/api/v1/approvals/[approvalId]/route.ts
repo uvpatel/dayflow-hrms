@@ -11,6 +11,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       success: true,
       message: `Approval request ${approvalId} fetched successfully`,
       data: { id: approvalId },
+      
     });
   } catch (error) {
     return NextResponse.json(
