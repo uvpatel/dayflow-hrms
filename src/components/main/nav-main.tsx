@@ -9,7 +9,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { CirclePlusIcon, MailIcon } from "lucide-react"
-import { ModeToggle } from "./toggler"
+import { ModeToggle } from "../toggler"
 import Link from "next/link"
 
 export function NavMain({
@@ -55,7 +55,6 @@ export function NavMain({
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
-        <h1>Organization</h1>
         
       </SidebarGroupContent>
     </SidebarGroup>
