@@ -39,18 +39,19 @@ export function NavMain({
               className="size-8 group-data-[collapsible=icon]:opacity-0"
               variant="outline"
             >
-              <ModeToggle
-              />
+             
               <span className="sr-only">Inbox</span>
             </Button>
+             <ModeToggle
+              />
           </SidebarMenuItem>
         </SidebarMenu>
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton tooltip={item.title}>
+              <SidebarMenuButton tooltip={item.title} render={<Link href={item.url} />}>
                 {item.icon}
-              <Link href={item.url}>{item.title}</Link>
+                <span>{item.title}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}

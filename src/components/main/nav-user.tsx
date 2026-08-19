@@ -82,29 +82,27 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <CircleUserRoundIcon
-                />
-               <Link href="/account">Account</Link>
+              <DropdownMenuItem render={<Link href="/account" />}>
+                <CircleUserRoundIcon />
+                <span>Account</span>
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCardIcon
-                />
-               <Link href="/billing"> Billing</Link>
+              <DropdownMenuItem render={<Link href="/billing" />}>
+                <CreditCardIcon />
+                <span>Billing</span>
               </DropdownMenuItem> 
-              <DropdownMenuItem>
-                <BellIcon
-                />
-               <Link href="/notifications">Notifications </Link> 
+              <DropdownMenuItem render={<Link href="/notifications" />}>
+                <BellIcon />
+                <span>Notifications</span> 
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <SignOutButton />
-               
-                Log out
-              
-          
+              <SignOutButton redirectUrl="/sign-in">
+                <div className="flex items-center gap-2 w-full cursor-pointer">
+                  <LogOutIcon className="size-4" />
+                  <span>Log out</span>
+                </div>
+              </SignOutButton>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -10,12 +10,14 @@ export default function dashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <section>
+  return( <section >
      <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
     {children}
      </SidebarInset>
     </SidebarProvider>
-    </section>;
+    </section>
+    
+  )
 }
