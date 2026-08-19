@@ -50,7 +50,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               </SignUpButton>
             </Show>
             <Show when="signed-in">
-             
+             <ModeToggle />
               <UserButton />
             </Show>
           </header>

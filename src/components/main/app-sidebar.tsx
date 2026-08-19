@@ -15,7 +15,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { LayoutDashboard, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon } from "lucide-react"
+import { Layout, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon } from "lucide-react"
 
 import {
   BadgeCheckIcon,
@@ -28,7 +28,7 @@ import {
   Clock3Icon,
   
   FolderKanbanIcon,
-  LayoutDashboardIcon,
+  LayoutIcon,
   MapPinIcon,
   
 
@@ -46,63 +46,63 @@ export const data = {
 
   navMain: [
     {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: <LayoutDashboardIcon />,
+      title: "",
+      url: "/",
+      icon: <LayoutIcon />,
     },
     {
       title: "People",
-      url: "/dashboard/people",
+      url: "//people",
       icon: <UsersRoundIcon />,
     },
     {
       title: "Attendance",
-      url: "/dashboard/attendance",
+      url: "//attendance",
       icon: <Clock3Icon />,
     },
     {
       title: "Time Off",
-      url: "/dashboard/time-off",
+      url: "//time-off",
       icon: <CalendarDaysIcon />,
     },
     {
       title: "Payroll",
-      url: "/dashboard/payroll",
+      url: "//payroll",
       icon: <WalletCardsIcon />,
     },
     {
       title: "Approvals",
-      url: "/dashboard/approvals",
+      url: "//approvals",
       icon: <BadgeCheckIcon />,
     },
     {
       title: "Organization",
-      url: "/dashboard/organization",
+      url: "//organization",
       icon: <Building2Icon />,
       items: [
         {
           title: "Overview",
-          url: "/dashboard/organization",
+          url: "//organization",
           icon: <ChartNoAxesCombinedIcon />,
         },
         {
           title: "Departments",
-          url: "/dashboard/departments",
+          url: "//departments",
           icon: <BuildingIcon />,
         },
         {
           title: "Designations",
-          url: "/dashboard/designations",
+          url: "//designations",
           icon: <ShieldCheckIcon />,
         },
         {
           title: "Office Locations",
-          url: "/dashboard/office-locations",
+          url: "//office-locations",
           icon: <MapPinIcon />,
         },
         {
           title: "Holidays",
-          url: "/dashboard/holidays",
+          url: "//holidays",
           icon: <CalendarCheckIcon />,
         },
       ],
@@ -112,39 +112,39 @@ export const data = {
   navWorkspace: [
     {
       title: "Documents",
-      url: "/dashboard/documents",
+      url: "//documents",
       icon: <FileTextIcon />,
       items: [
         {
           title: "Company Policies",
-          url: "/dashboard/documents/policies",
+          url: "//documents/policies",
         },
         {
           title: "Employee Documents",
-          url: "/dashboard/documents/employees",
+          url: "//documents/employees",
         },
         {
           title: "Templates",
-          url: "/dashboard/documents/templates",
+          url: "//documents/templates",
         },
       ],
     },
     {
       title: "Reports",
-      url: "/dashboard/reports",
+      url: "//reports",
       icon: <FileChartColumnIcon />,
       items: [
         {
           title: "Attendance Reports",
-          url: "/dashboard/reports/attendance",
+          url: "//reports/attendance",
         },
         {
           title: "Payroll Reports",
-          url: "/dashboard/reports/payroll",
+          url: "//reports/payroll",
         },
         {
           title: "Employee Reports",
-          url: "/dashboard/reports/employees",
+          url: "//reports/employees",
         },
       ],
     },
@@ -153,17 +153,17 @@ export const data = {
   navSecondary: [
     {
       title: "Settings",
-      url: "/dashboard/settings",
+      url: "//settings",
       icon: <Settings2Icon />,
     },
     {
       title: "Help & Support",
-      url: "/dashboard/help",
+      url: "//help",
       icon: <CircleHelpIcon />,
     },
     {
       title: "Search",
-      url: "/dashboard/search",
+      url: "//search",
       icon: <SearchIcon />,
     },
   ],
@@ -171,22 +171,22 @@ export const data = {
   quickAccess: [
     {
       name: "Employee Directory",
-      url: "/dashboard/people",
+      url: "//people",
       icon: <UsersRoundIcon />,
     },
     {
       name: "Leave Calendar",
-      url: "/dashboard/time-off/calendar",
+      url: "//time-off/calendar",
       icon: <CalendarDaysIcon />,
     },
     {
       name: "HR Documents",
-      url: "/dashboard/documents",
+      url: "//documents",
       icon: <FolderKanbanIcon />,
     },
     {
       name: "Reports",
-      url: "/dashboard/reports",
+      url: "//reports",
       icon: <FileChartColumnIcon />,
     },
   ],
