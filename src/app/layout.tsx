@@ -3,10 +3,11 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider, Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ThemeProvider } from "@/app/providers/theme-provider";
+import { ThemeProvider } from "@/providers/theme-provider";
 import { ModeToggle } from "@/components/toggler";
 import { dark, neobrutalism } from '@clerk/ui/themes'
 import Link from "next/link";
+import { QueryProvider } from "@/providers/query-provider";
 
 
 const geistSans = Geist({
@@ -35,6 +36,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <TooltipProvider>
+          <QueryProvider>
+
+        
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
@@ -78,6 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </ClerkProvider>
         </ThemeProvider>
+          </QueryProvider>
          </TooltipProvider>
       </body>
     </html>

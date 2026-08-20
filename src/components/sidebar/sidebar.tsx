@@ -47,14 +47,14 @@ const data = {
   },
   teams: [
     {
-      name: "Dayflow",
+      name: "Dayflow Employee",
       logo: Building2,
       plan: "Enterprise",
     },
     {
-      name: "Acme Corp.",
+      name: "Dayflow Admin",
       logo: Building2,
-      plan: "Startup",
+      plan: "Enterprise",
     },
   ],
   navMain: [

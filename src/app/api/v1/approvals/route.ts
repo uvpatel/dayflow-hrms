@@ -5,7 +5,7 @@ import { approvalRequests } from "@/db/schema/approval-requests";
 export async function GET(request: NextRequest) {
   try {
     
-    const approvals = db.select().from(approvalRequests);
+    const approvals = await db.select().from(approvalRequests);
     return NextResponse.json({
       success: true,
       message: "Approval requests fetched successfully",
