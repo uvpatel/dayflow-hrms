@@ -71,12 +71,13 @@ Required configuration:
 DATABASE_URL="postgresql://..."
 BETTER_AUTH_SECRET="a-random-secret-with-at-least-32-characters"
 BETTER_AUTH_URL="http://localhost:3000"
-NEXT_PUBLIC_BETTER_AUTH_URL="http://localhost:3000"
 AUTH_REQUIRE_EMAIL_VERIFICATION="false"
 BETTER_AUTH_TRUSTED_ORIGINS="http://localhost:3000"
 ```
 
 `AUTH_REQUIRE_EMAIL_VERIFICATION` defaults to `false` in development and `true` in production. Passwords must contain 12–128 characters. Use a comma-separated trusted-origin list for additional first-party deployment origins.
+
+`NEXT_PUBLIC_BETTER_AUTH_URL` is optional for this same-origin application and should normally be omitted. Public Next.js environment values are embedded at build time, so a development URL there can break a production deployment.
 
 Optional GitHub OAuth:
 
@@ -105,7 +106,7 @@ Production must use an HTTPS `BETTER_AUTH_URL`, a unique high-entropy secret, an
 
 ## Database workflow
 
-Schema definitions are in `src/db/schema`; append-only migrations and snapshots are in `drizzle`. This pass generated `drizzle/20260822083351_worthless_mister_fear` followed by `drizzle/20260822092821_mysterious_zemo`. Neither migration has been applied to a database, and the seed has not been run in this implementation pass. A final `db:generate` reported no additional schema changes.
+Schema definitions are in `src/db/schema`; append-only migrations and snapshots are in `drizzle`. Generated migrations are not applied automatically by `next build` or Vercel. The seed has not been run in this implementation pass.
 
 Generate and inspect a migration:
 
@@ -217,11 +218,14 @@ At the documentation checkpoint on 2026-08-22, `bun test` passed all 26 unit tes
 
 ## Deployment checklist
 
-Do not deploy this branch as a complete production HR/payroll system until the limitations above are accepted or resolved and both generated migrations are validated on representative data.
+Do not deploy this branch as a complete production HR/payroll system until the limitations above are accepted or resolved and all pending migrations are validated on representative data.
 
-- Take a verified backup or database branch, run duplicate/orphan/cast preflight checks, rehearse both migrations on representative data, and only then apply the reviewed migrations to production.
-- Set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and all provider secrets in the deployment environment.
-- Configure GitHub's production callback URL as `<origin>/api/auth/callback/github`.
+- Set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, and all provider/email secrets in the Vercel Production environment. For this deployment, both URL values must use `https://dayflow-hrms-eight.vercel.app`.
+- Leave `NEXT_PUBLIC_BETTER_AUTH_URL` unset for same-origin authentication. If it is set, it must use the production origin and the deployment must be rebuilt after changing it.
+- Take a verified Neon backup or branch, run duplicate/orphan/cast preflight checks, rehearse every pending migration on representative data, and only then run `bun run db:migrate` once against the reviewed production `DATABASE_URL`. Do not put migrations in the Vercel build command and do not use `db:push` in production.
+- Verify that the production database contains the singular `user`, `session`, `account`, and `verification` auth tables. OAuth initiation requires insert access to `verification`, and Better Auth 1.7 requires the non-null `account.issuer` column.
+- Configure GitHub's production callback URL as `https://dayflow-hrms-eight.vercel.app/api/auth/callback/github`.
+- Redeploy after changing any Vercel environment variable; changes do not affect an existing deployment.
 - Confirm email delivery before requiring verification in production.
 - Run lint, typecheck, tests, and the production build.
 - Verify employee, manager, HR, and admin accounts against the route-access matrix.

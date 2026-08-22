@@ -10,10 +10,28 @@ import { z } from "zod";
 
 const isProduction = process.env.NODE_ENV === "production";
 const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
-const configuredBaseURL =
-  process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
 
-if (isProduction && !authSecret) {
+function getVercelBaseURL(): string | undefined {
+  const host =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (!host?.trim()) return undefined;
+
+  const value = host.trim();
+  const url = new URL(
+    value.startsWith("http://") || value.startsWith("https://")
+      ? value
+      : `https://${value}`,
+  );
+
+  return url.origin;
+}
+
+const configuredBaseURL =
+  process.env.BETTER_AUTH_URL ||
+  getVercelBaseURL() ||
+  process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+
+if (isProduction && (!authSecret || authSecret.length < 32)) {
   throw new Error(
     "BETTER_AUTH_SECRET is required in production and must contain at least 32 high-entropy characters.",
   );
@@ -110,7 +128,8 @@ export const auth = betterAuth({
         required: false,
         input: true,
         returned: true,
-        fieldName: "employee_number",
+        // The Drizzle adapter maps this property to the schema's
+        // employeeNumber key; Drizzle handles the employee_number SQL column.
         transform: {
           input: (value) =>
             typeof value === "string" ? value.trim().toUpperCase() : value,

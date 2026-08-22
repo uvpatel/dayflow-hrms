@@ -138,7 +138,7 @@ export function LoginForm({
       if (res?.error) {
         setFormError(
           res.error.message ||
-            "Failed to sign in with GitHub. Please verify GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are configured."
+            "GitHub sign-in is temporarily unavailable. Please try again or use email and password."
         );
         setIsGithubLoading(false);
       }

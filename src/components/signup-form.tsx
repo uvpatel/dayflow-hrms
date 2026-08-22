@@ -169,7 +169,7 @@ export function SignupForm({
       if (res?.error) {
         setFormError(
           res.error.message ||
-            "Failed to sign up with GitHub. Please verify GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are configured."
+            "GitHub sign-up is temporarily unavailable. Please try again or use email and password."
         );
         setIsGithubLoading(false);
       }
