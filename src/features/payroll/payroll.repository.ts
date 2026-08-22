@@ -5,7 +5,7 @@ import {
   salaryComponents,
   payslips,
 } from "@/db/schema";
-import { count, desc, eq, ilike } from "drizzle-orm";
+import { and, count, desc, eq, ilike } from "drizzle-orm";
 import {
   NewPayrollPeriod,
   NewSalaryStructure,
@@ -15,22 +15,29 @@ import {
 
 export class PayrollRepository {
   // Periods
-  async findPeriods(limit = 20, offset = 0) {
+  async findPeriods(organizationId: number, limit = 20, offset = 0) {
     return await db
       .select()
       .from(payrollPeriods)
+      .where(eq(payrollPeriods.organizationId, organizationId))
       .orderBy(desc(payrollPeriods.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async countPeriods(): Promise<number> {
-    const [res] = await db.select({ total: count() }).from(payrollPeriods);
+  async countPeriods(organizationId: number): Promise<number> {
+    const [res] = await db
+      .select({ total: count() })
+      .from(payrollPeriods)
+      .where(eq(payrollPeriods.organizationId, organizationId));
     return res?.total ?? 0;
   }
 
-  async findPeriodById(id: number) {
-    const [item] = await db.select().from(payrollPeriods).where(eq(payrollPeriods.id, id));
+  async findPeriodById(organizationId: number, id: number) {
+    const [item] = await db.select().from(payrollPeriods).where(and(
+      eq(payrollPeriods.id, id),
+      eq(payrollPeriods.organizationId, organizationId),
+    ));
     return item ?? null;
   }
 
@@ -39,17 +46,23 @@ export class PayrollRepository {
     return created;
   }
 
-  async updatePeriod(id: number, data: Partial<NewPayrollPeriod>) {
+  async updatePeriod(organizationId: number, id: number, data: Partial<NewPayrollPeriod>) {
     const [updated] = await db
       .update(payrollPeriods)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(payrollPeriods.id, id))
+      .where(and(
+        eq(payrollPeriods.id, id),
+        eq(payrollPeriods.organizationId, organizationId),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async deletePeriod(id: number) {
-    const [deleted] = await db.delete(payrollPeriods).where(eq(payrollPeriods.id, id)).returning();
+  async deletePeriod(organizationId: number, id: number) {
+    const [deleted] = await db.delete(payrollPeriods).where(and(
+      eq(payrollPeriods.id, id),
+      eq(payrollPeriods.organizationId, organizationId),
+    )).returning();
     return deleted ?? null;
   }
 
@@ -122,8 +135,11 @@ export class PayrollRepository {
   }
 
   // Payslips
-  async findPayslips(limit = 50, offset = 0, search?: string) {
-    const where = search ? ilike(payslips.name, `%${search}%`) : undefined;
+  async findPayslips(organizationId: number, limit = 50, offset = 0, search?: string) {
+    const where = and(
+      eq(payslips.organizationId, organizationId),
+      search ? ilike(payslips.name, `%${search}%`) : undefined,
+    );
     return await db
       .select()
       .from(payslips)
@@ -133,14 +149,20 @@ export class PayrollRepository {
       .offset(offset);
   }
 
-  async countPayslips(search?: string): Promise<number> {
-    const where = search ? ilike(payslips.name, `%${search}%`) : undefined;
+  async countPayslips(organizationId: number, search?: string): Promise<number> {
+    const where = and(
+      eq(payslips.organizationId, organizationId),
+      search ? ilike(payslips.name, `%${search}%`) : undefined,
+    );
     const [res] = await db.select({ total: count() }).from(payslips).where(where);
     return res?.total ?? 0;
   }
 
-  async findPayslipById(id: number) {
-    const [item] = await db.select().from(payslips).where(eq(payslips.id, id));
+  async findPayslipById(organizationId: number, id: number) {
+    const [item] = await db.select().from(payslips).where(and(
+      eq(payslips.id, id),
+      eq(payslips.organizationId, organizationId),
+    ));
     return item ?? null;
   }
 
@@ -149,17 +171,23 @@ export class PayrollRepository {
     return created;
   }
 
-  async updatePayslip(id: number, data: Partial<NewPayslip>) {
+  async updatePayslip(organizationId: number, id: number, data: Partial<NewPayslip>) {
     const [updated] = await db
       .update(payslips)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(payslips.id, id))
+      .where(and(
+        eq(payslips.id, id),
+        eq(payslips.organizationId, organizationId),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async deletePayslip(id: number) {
-    const [deleted] = await db.delete(payslips).where(eq(payslips.id, id)).returning();
+  async deletePayslip(organizationId: number, id: number) {
+    const [deleted] = await db.delete(payslips).where(and(
+      eq(payslips.id, id),
+      eq(payslips.organizationId, organizationId),
+    )).returning();
     return deleted ?? null;
   }
 }

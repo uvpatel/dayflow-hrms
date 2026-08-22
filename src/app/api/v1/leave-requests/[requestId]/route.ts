@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:read:self");
 
     const { requestId } = await validateParams(params, requestIdParamSchema);
-    const item = await timeOffService.getRequest(requestId);
+    const item = await timeOffService.getRequestForActor(authContext, requestId);
 
     return successResponse(item, undefined, `Leave request ${requestId} fetched successfully`);
   } catch (error) {
@@ -35,7 +35,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { requestId } = await validateParams(params, requestIdParamSchema);
     const data = await validateBody(request, updateLeaveRequestSchema);
-    const updated = await timeOffService.updateRequest(requestId, data);
+    const updated = await timeOffService.updateRequestForActor(
+      authContext,
+      requestId,
+      data,
+    );
 
     return successResponse(updated, undefined, `Leave request ${requestId} updated successfully`);
   } catch (error) {
@@ -49,9 +53,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:delete");
 
     const { requestId } = await validateParams(params, requestIdParamSchema);
-    const deleted = await timeOffService.deleteRequest(requestId);
+    const deleted = await timeOffService.cancelRequest(authContext, requestId);
 
-    return successResponse(deleted, undefined, `Leave request ${requestId} deleted successfully`);
+    return successResponse(deleted, undefined, `Leave request ${requestId} cancelled successfully`);
   } catch (error) {
     return errorResponse(error);
   }

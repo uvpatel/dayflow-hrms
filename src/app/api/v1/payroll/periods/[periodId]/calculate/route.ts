@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { payrollService } from "@/features/payroll/payroll.service";
 import { errorResponse, successResponse, validateParams } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import { getAuthContext, requireOrganization, requirePermission } from "@/lib/auth/session";
 
 const periodIdParamSchema = z.object({
   periodId: z
@@ -21,9 +21,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { periodId } = await validateParams(params, periodIdParamSchema);
-    const result = await payrollService.calculatePayroll(periodId);
+    const result = await payrollService.calculatePayroll(organizationId, periodId);
 
     return successResponse(result, undefined, "Payroll calculated successfully");
   } catch (error) {

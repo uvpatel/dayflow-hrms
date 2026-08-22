@@ -1,9 +1,11 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { approvalsService } from "@/features/approvals/approvals.service";
+import { approvalActionSchema } from "@/features/approvals/approvals.schemas";
 import {
   errorResponse,
   successResponse,
+  validateBody,
   validateParams,
 } from "@/lib/api";
 import { getAuthContext, requirePermission } from "@/lib/auth/session";
@@ -24,19 +26,17 @@ type RouteParams = {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "approval:action");
+    requirePermission(authContext, "approval:read");
 
     const { approvalId } = await validateParams(params, approvalIdParamSchema);
 
-    let reason: string | undefined;
-    try {
-      const body = await request.json();
-      reason = body.reason;
-    } catch {
-      // Body is optional
-    }
-
-    const updated = await approvalsService.reject(approvalId, reason);
+    const { reason } = await validateBody(request, approvalActionSchema);
+    const updated = await approvalsService.decide(
+      authContext,
+      approvalId,
+      "rejected",
+      reason,
+    );
 
     return successResponse(updated, undefined, `Approval request ${approvalId} rejected`);
   } catch (error) {

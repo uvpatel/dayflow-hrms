@@ -1,12 +1,19 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { getAuthContext } from "@/lib/auth-context";
+import { EmployeeDashboardClient } from "./employee-client";
 
-export default function EmployeePage() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-4">
-      <h1 className="text-2xl font-bold">Employee Page</h1>
-      <p className="text-center text-muted-foreground">
-        This is the employee page. You can add your content here.
-      </p>
-    </div>
-  )
+export const metadata = {
+  title: "Employee Workspace | Dayflow HRMS",
+  description: "Personal workday pulse, time-off requests, attendance logs, and payroll records.",
+};
+
+export default async function EmployeePage() {
+  const context = await getAuthContext(await headers());
+
+  if (!context) {
+    redirect("/sign-in");
+  }
+
+  return <EmployeeDashboardClient userRole={context.role} />;
 }

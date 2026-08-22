@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "approval:read");
 
     const { approvalId } = await validateParams(params, approvalIdParamSchema);
-    const item = await approvalsService.getApproval(approvalId);
+    const item = await approvalsService.getApprovalForActor(authContext, approvalId);
 
     return successResponse(item, undefined, `Approval request ${approvalId} fetched successfully`);
   } catch (error) {
@@ -40,11 +40,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "approval:action");
+    requirePermission(authContext, "approval:manage");
 
     const { approvalId } = await validateParams(params, approvalIdParamSchema);
     const data = await validateBody(request, updateApprovalSchema);
-    const updated = await approvalsService.updateApproval(approvalId, data);
+    const updated = await approvalsService.updateApprovalForActor(
+      authContext,
+      approvalId,
+      data,
+    );
 
     return successResponse(updated, undefined, `Approval request ${approvalId} updated successfully`);
   } catch (error) {
@@ -55,10 +59,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "approval:action");
+    requirePermission(authContext, "approval:manage");
 
     const { approvalId } = await validateParams(params, approvalIdParamSchema);
-    const deleted = await approvalsService.deleteApproval(approvalId);
+    const deleted = await approvalsService.deleteApprovalForActor(authContext, approvalId);
 
     return successResponse(deleted, undefined, `Approval request ${approvalId} deleted successfully`);
   } catch (error) {

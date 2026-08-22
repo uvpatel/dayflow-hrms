@@ -11,6 +11,8 @@ import {
   assertRejectComment,
   assertSufficientLeaveBalance,
   calculateRequestedDays,
+  canDecideLeaveRequest,
+  canReadLeaveRequest,
 } from "../src/features/time-off/time-off.domain";
 
 describe("attendance domain rules", () => {
@@ -42,6 +44,17 @@ describe("attendance domain rules", () => {
         { breakMinutes: 0, fullDayMinutes: 480, halfDayMinutes: 240 },
       ),
     ).toThrow("after check-in");
+  });
+
+  test("marks work below the half-day threshold as absent", () => {
+    const result = calculateAttendance(
+      new Date("2026-08-22T09:00:00.000Z"),
+      new Date("2026-08-22T11:00:00.000Z"),
+      { breakMinutes: 0, fullDayMinutes: 480, halfDayMinutes: 240 },
+    );
+
+    expect(result.workMinutes).toBe(120);
+    expect(result.status).toBe("absent");
   });
 
   test("applies schedule grace when determining lateness", () => {
@@ -104,5 +117,57 @@ describe("leave domain rules", () => {
     expect(() => assertRejectComment("  ")).toThrow("required");
     expect(assertRejectComment(" staffing conflict ")).toBe("staffing conflict");
     expect(() => assertPendingCancellation("approved")).toThrow("Only pending");
+  });
+
+  test("scopes leave reads to self, direct reports, or the same organization", () => {
+    const employee = {
+      role: "employee" as const,
+      employeeId: 10,
+      organizationId: 1,
+    };
+    const manager = {
+      role: "manager" as const,
+      employeeId: 20,
+      organizationId: 1,
+    };
+    const hr = {
+      role: "hr" as const,
+      employeeId: 30,
+      organizationId: 1,
+    };
+    const ownSubject = { id: 10, managerId: 20, organizationId: 1 };
+    const directReport = { id: 11, managerId: 20, organizationId: 1 };
+    const unrelated = { id: 12, managerId: 99, organizationId: 1 };
+    const otherOrganization = { id: 13, managerId: 20, organizationId: 2 };
+
+    expect(canReadLeaveRequest(employee, ownSubject)).toBe(true);
+    expect(canReadLeaveRequest(employee, directReport)).toBe(false);
+    expect(canReadLeaveRequest(manager, directReport)).toBe(true);
+    expect(canReadLeaveRequest(manager, unrelated)).toBe(false);
+    expect(canReadLeaveRequest(hr, unrelated)).toBe(true);
+    expect(canReadLeaveRequest(hr, otherOrganization)).toBe(false);
+  });
+
+  test("allows decisions only for HR/admin or the assigned direct manager", () => {
+    const subject = { id: 11, managerId: 20, organizationId: 1 };
+
+    expect(
+      canDecideLeaveRequest(
+        { role: "manager", employeeId: 20, organizationId: 1 },
+        subject,
+      ),
+    ).toBe(true);
+    expect(
+      canDecideLeaveRequest(
+        { role: "manager", employeeId: 21, organizationId: 1 },
+        subject,
+      ),
+    ).toBe(false);
+    expect(
+      canDecideLeaveRequest(
+        { role: "admin", employeeId: 31, organizationId: 2 },
+        subject,
+      ),
+    ).toBe(false);
   });
 });

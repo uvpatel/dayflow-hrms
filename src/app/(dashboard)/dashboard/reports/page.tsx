@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import {
   BarChart3,
-  TrendingUp,
   Download,
   Calendar,
   DollarSign,
@@ -62,7 +61,23 @@ export default function ReportsPage() {
   const { data: payrollReport, isLoading: payLoading, refetch: refetchPay } = usePayrollReports();
 
   const handleExportCSV = (filename: string) => {
-    toast.success(`Exporting ${filename}.csv... Download started.`);
+    const rows = [
+      ["Metric", "Value"],
+      ["Active workforce", dashboardReport?.totalEmployees ?? 0],
+      ["Present today", dashboardReport?.presentToday ?? 0],
+      ["Leave requests", leaveReport?.summary.totalRequests ?? 0],
+      ["Published payroll total", payrollReport?.summary.totalDisbursed ?? 0],
+    ];
+    const csv = rows
+      .map((row) => row.map((cell) => JSON.stringify(String(cell))).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${filename}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${filename}.csv downloaded`);
   };
 
   const handleRefreshAll = () => {
@@ -75,23 +90,24 @@ export default function ReportsPage() {
 
   const loading = dashLoading || attLoading || leaveLoading || payLoading;
 
-  const attendanceData = dashboardReport?.attendanceTrend ?? [
-    { date: "Mon", present: 18, absent: 1, leave: 1 },
-    { date: "Tue", present: 19, absent: 0, leave: 1 },
-    { date: "Wed", present: 18, absent: 1, leave: 1 },
-    { date: "Thu", present: 19, absent: 1, leave: 0 },
-    { date: "Fri", present: 18, absent: 1, leave: 1 },
-  ];
+  const attendanceData = dashboardReport?.attendanceTrend ?? [];
 
   const leaveByStatus = leaveReport ? [
     { status: "Approved", count: leaveReport.summary.approved },
     { status: "Pending", count: leaveReport.summary.pending },
     { status: "Rejected", count: leaveReport.summary.rejected },
-  ] : [
-    { status: "Approved", count: 8 },
-    { status: "Pending", count: 3 },
-    { status: "Rejected", count: 1 },
-  ];
+  ] : [];
+  const recordedAttendance = attendanceReport?.dailyBreakdown.reduce(
+    (total, day) => total + day.present + day.absent,
+    0,
+  ) ?? 0;
+  const recordedPresent = attendanceReport?.dailyBreakdown.reduce(
+    (total, day) => total + day.present,
+    0,
+  ) ?? 0;
+  const attendanceRate = recordedAttendance > 0
+    ? (recordedPresent / recordedAttendance) * 100
+    : 0;
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
@@ -127,7 +143,7 @@ export default function ReportsPage() {
             <Users className="size-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{dashboardReport?.totalEmployees ?? 20}</div>
+            <div className="text-2xl font-bold">{dashboardReport?.totalEmployees ?? 0}</div>
             <p className="text-xs text-muted-foreground pt-1">Active staff members</p>
           </CardContent>
         </Card>
@@ -138,11 +154,8 @@ export default function ReportsPage() {
             <Clock className="size-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">94.2%</div>
-            <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pt-1">
-              <TrendingUp className="size-3.5" />
-              <span>+2.1% from last month</span>
-            </div>
+            <div className="text-2xl font-bold">{attendanceRate.toFixed(1)}%</div>
+            <p className="pt-1 text-xs text-muted-foreground">Based on recorded attendance rows</p>
           </CardContent>
         </Card>
 
@@ -152,8 +165,8 @@ export default function ReportsPage() {
             <Calendar className="size-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{leaveReport?.summary.totalRequests ?? 12}</div>
-            <p className="text-xs text-muted-foreground pt-1">{leaveReport?.summary.pending ?? 3} awaiting approval</p>
+            <div className="text-2xl font-bold">{leaveReport?.summary.totalRequests ?? 0}</div>
+            <p className="text-xs text-muted-foreground pt-1">{leaveReport?.summary.pending ?? 0} awaiting approval</p>
           </CardContent>
         </Card>
 
@@ -163,7 +176,7 @@ export default function ReportsPage() {
             <DollarSign className="size-4 text-emerald-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${payrollReport?.summary.totalDisbursed.toLocaleString() ?? "142,500.00"}</div>
+            <div className="text-2xl font-bold">${(payrollReport?.summary.totalDisbursed ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
             <p className="text-xs text-muted-foreground pt-1">Total compensation disbursed</p>
           </CardContent>
         </Card>
@@ -234,7 +247,7 @@ export default function ReportsPage() {
                     { status: "On time", count: attendanceReport.summary.onTime },
                     { status: "Late", count: attendanceReport.summary.late },
                     { status: "Half day", count: attendanceReport.summary.halfDay },
-                  ] : [{ status: "Present", count: 85 }, { status: "Late", count: 8 }, { status: "Half Day", count: 3 }, { status: "Absent", count: 4 }]}>
+                  ] : []}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                     <XAxis dataKey="status" tickLine={false} axisLine={false} />
                     <YAxis tickLine={false} axisLine={false} />
@@ -288,7 +301,9 @@ export default function ReportsPage() {
                       </TableCell>
                       <TableCell className="tabular-nums font-semibold">{item.count}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {Math.round((item.count / 12) * 100)}%
+                        {leaveReport && leaveReport.summary.totalRequests > 0
+                          ? Math.round((item.count / leaveReport.summary.totalRequests) * 100)
+                          : 0}%
                       </TableCell>
                     </TableRow>
                   ))}
@@ -309,21 +324,25 @@ export default function ReportsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Payroll Period</TableHead>
-                    <TableHead>Payslips Processed</TableHead>
-                    <TableHead>Total Gross</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Department</TableHead>
+                    <TableHead>Total published net pay</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium">August 2026</TableCell>
-                    <TableCell className="tabular-nums">20 Staff</TableCell>
-                    <TableCell className="tabular-nums font-mono font-semibold">$142,500.00</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700">Finalized</Badge>
-                    </TableCell>
-                  </TableRow>
+                  {(payrollReport?.costByDepartment ?? []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center text-muted-foreground">
+                        No published payroll data is available.
+                      </TableCell>
+                    </TableRow>
+                  ) : payrollReport?.costByDepartment.map((entry) => (
+                    <TableRow key={entry.department}>
+                      <TableCell className="font-medium">{entry.department}</TableCell>
+                      <TableCell className="tabular-nums font-mono font-semibold">
+                        ${entry.totalPay.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </CardContent>

@@ -1,15 +1,29 @@
 import { db } from "@/db";
 import { approvalRequests } from "@/db/schema";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { NewApprovalRequest } from "./approvals.types";
 
 export class ApprovalsRepository {
-  async findApprovals(limit = 20, offset = 0, approverId?: number, status?: string) {
+  private whereForScope(scope: {
+    requestorIds: number[];
+    approverId?: number;
+    status?: string;
+  }) {
     const conditions = [];
-    if (approverId) conditions.push(eq(approvalRequests.approverId, approverId));
-    if (status) conditions.push(eq(approvalRequests.status, status));
+    conditions.push(inArray(approvalRequests.requestorId, scope.requestorIds));
+    if (scope.approverId) conditions.push(eq(approvalRequests.approverId, scope.approverId));
+    if (scope.status) conditions.push(eq(approvalRequests.status, scope.status));
+    return and(...conditions);
+  }
 
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
+  async findApprovals(
+    limit: number,
+    offset: number,
+    scope: { requestorIds: number[]; approverId?: number; status?: string },
+  ) {
+    if (scope.requestorIds.length === 0) return [];
+
+    const where = this.whereForScope(scope);
 
     return await db
       .select()
@@ -20,12 +34,13 @@ export class ApprovalsRepository {
       .offset(offset);
   }
 
-  async countApprovals(approverId?: number, status?: string): Promise<number> {
-    const conditions = [];
-    if (approverId) conditions.push(eq(approvalRequests.approverId, approverId));
-    if (status) conditions.push(eq(approvalRequests.status, status));
-
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
+  async countApprovals(scope: {
+    requestorIds: number[];
+    approverId?: number;
+    status?: string;
+  }): Promise<number> {
+    if (scope.requestorIds.length === 0) return 0;
+    const where = this.whereForScope(scope);
     const [res] = await db.select({ total: count() }).from(approvalRequests).where(where);
     return res?.total ?? 0;
   }
@@ -45,6 +60,18 @@ export class ApprovalsRepository {
       .update(approvalRequests)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(approvalRequests.id, id))
+      .returning();
+    return updated ?? null;
+  }
+
+  async decideApproval(id: number, status: "approved" | "rejected") {
+    const [updated] = await db
+      .update(approvalRequests)
+      .set({ status, updatedAt: new Date() })
+      .where(and(
+        eq(approvalRequests.id, id),
+        eq(approvalRequests.status, "pending"),
+      ))
       .returning();
     return updated ?? null;
   }

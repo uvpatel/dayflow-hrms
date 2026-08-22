@@ -15,6 +15,7 @@ import {
   leaveAllocations,
   leaveRequests,
   attendances,
+  attendanceCorrections,
   salaryStructures,
   salaryComponents,
   payrollPeriods,
@@ -25,6 +26,13 @@ import {
 import { eq, sql } from "drizzle-orm";
 
 async function main() {
+  if (
+    process.env.NODE_ENV === "production" ||
+    process.env.VERCEL_ENV === "production"
+  ) {
+    throw new Error("The development seed is disabled in production environments.");
+  }
+
   console.log("🌱 Starting Dayflow HRMS Idempotent Seed...");
 
   // 1. Organization
@@ -264,7 +272,12 @@ async function main() {
     { name: "Paid Leave", description: "Standard annual vacation allowance", defaultDays: 20 },
     { name: "Sick Leave", description: "Medical and personal sick days", defaultDays: 10 },
     { name: "Casual Leave", description: "Short notice urgent personal leave", defaultDays: 5 },
-    { name: "Unpaid Leave", description: "Leave without pay", defaultDays: 0 },
+    {
+      name: "Unpaid Leave",
+      description: "Leave without pay",
+      defaultDays: 0,
+      requiresBalance: false,
+    },
   ];
   for (const lt of leaveTypeData) {
     const [existing] = await db.select().from(leaveTypes).where(eq(leaveTypes.name, lt.name)).limit(1);
@@ -272,7 +285,13 @@ async function main() {
       await db.insert(leaveTypes).values({
         name: lt.name,
         description: lt.description,
+        requiresBalance: lt.requiresBalance ?? true,
       });
+    } else if (lt.name === "Unpaid Leave" && existing.requiresBalance) {
+      await db
+        .update(leaveTypes)
+        .set({ requiresBalance: false, updatedAt: new Date() })
+        .where(eq(leaveTypes.id, existing.id));
     }
   }
 
@@ -373,6 +392,66 @@ async function main() {
     }
   }
 
+  const openAttendanceEmployee = seededEmployees.at(-1);
+  if (openAttendanceEmployee) {
+    const openDate = new Date("2026-08-22T16:00:00.000Z");
+    const openWorkDate = "2026-08-22";
+    const [existingOpenAttendance] = await db
+      .select()
+      .from(attendances)
+      .where(sql`
+        ${attendances.employeeId} = ${openAttendanceEmployee.id}
+        AND ${attendances.workDate} = ${openWorkDate}
+      `)
+      .limit(1);
+    if (!existingOpenAttendance) {
+      await db.insert(attendances).values({
+        userId: openAttendanceEmployee.userId,
+        employeeId: openAttendanceEmployee.id,
+        organizationId: org.id,
+        workDate: openWorkDate,
+        date: openDate,
+        checkInTime: openDate,
+        checkOutTime: null,
+        status: "present",
+        scheduleTimezone: org.timezone,
+      });
+    }
+  }
+
+  const [correctionAttendance] = await db
+    .select()
+    .from(attendances)
+    .where(sql`${attendances.checkOutTime} is not null`)
+    .limit(1);
+  if (correctionAttendance?.employeeId) {
+    const correctionReason = "Forgot to record the scheduled check-in time";
+    const [existingCorrection] = await db
+      .select()
+      .from(attendanceCorrections)
+      .where(sql`
+        ${attendanceCorrections.employeeId} = ${correctionAttendance.employeeId}
+        AND ${attendanceCorrections.attendanceId} = ${correctionAttendance.id}
+        AND ${attendanceCorrections.reason} = ${correctionReason}
+      `)
+      .limit(1);
+    if (!existingCorrection) {
+      await db.insert(attendanceCorrections).values({
+        userId: correctionAttendance.userId,
+        employeeId: correctionAttendance.employeeId,
+        organizationId: org.id,
+        attendanceId: correctionAttendance.id,
+        correctionDate: correctionAttendance.date,
+        requestedCheckInTime: new Date(
+          correctionAttendance.date.getTime() - 15 * 60_000,
+        ),
+        requestedCheckOutTime: correctionAttendance.checkOutTime,
+        reason: correctionReason,
+        status: "pending",
+      });
+    }
+  }
+
   // 11. Salary Structures & Payroll
   console.log("💰 Seeding salary structures and payroll periods...");
   let [struct] = await db.select().from(salaryStructures).limit(1);
@@ -401,7 +480,7 @@ async function main() {
         description: "Monthly Payroll Cycle - August 2026",
         startDate: new Date("2026-08-01"),
         endDate: new Date("2026-08-31"),
-        status: "draft",
+        status: "published",
         organizationId: org.id,
       })
       .returning();
@@ -426,7 +505,8 @@ async function main() {
         grossSalary: "9200.00",
         deductions: "350.00",
         netSalary: "8850.00",
-        status: "draft",
+        status: "published",
+        publishedAt: new Date("2026-09-01T09:00:00.000Z"),
       });
     }
   }
@@ -473,11 +553,7 @@ async function main() {
   console.log("===============================================================\n");
 }
 
-main()
-  .catch((err) => {
-    console.error("❌ Seed execution failed:", err);
-    process.exit(1);
-  })
-  .finally(() => {
-    process.exit(0);
-  });
+main().catch((err) => {
+  console.error("❌ Seed execution failed:", err);
+  process.exitCode = 1;
+});

@@ -102,10 +102,14 @@ describe("post-authentication routing", () => {
     expect(canAccessPage("employee", "/dashboard/people/profile")).toBe(true);
     expect(canAccessPage("employee", "/dashboard/people/42")).toBe(false);
     expect(canAccessPage("manager", "/dashboard/people/42")).toBe(true);
+    expect(canAccessPage("employee", "/dashboard/my-team")).toBe(false);
+    expect(canAccessPage("manager", "/dashboard/my-team")).toBe(true);
     expect(canAccessPage("manager", "/dashboard/payroll/periods")).toBe(false);
     expect(canAccessPage("hr", "/dashboard/payroll/periods")).toBe(true);
     expect(canAccessPage("hr", "/admin")).toBe(false);
     expect(canAccessPage("admin", "/admin")).toBe(true);
+    expect(canAccessPage("hr", "/dashboard/roles")).toBe(false);
+    expect(canAccessPage("admin", "/dashboard/roles")).toBe(true);
   });
 
   test("rejects external and auth-loop callback destinations", () => {

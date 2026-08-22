@@ -1,5 +1,6 @@
 import { payrollRepository } from "./payroll.repository";
-import { NotFoundError } from "@/lib/api/errors";
+import { ConflictError, NotFoundError } from "@/lib/api/errors";
+import { employeeRepository } from "@/features/employees/employee.repository";
 import { logActivity } from "@/lib/audit/logger";
 import { z } from "zod";
 import {
@@ -15,24 +16,27 @@ import {
 
 export class PayrollService {
   // Periods
-  async listPeriods(limit = 20, offset = 0) {
+  async listPeriods(organizationId: number, limit = 20, offset = 0) {
     const [items, total] = await Promise.all([
-      payrollRepository.findPeriods(limit, offset),
-      payrollRepository.countPeriods(),
+      payrollRepository.findPeriods(organizationId, limit, offset),
+      payrollRepository.countPeriods(organizationId),
     ]);
     return { items, total };
   }
 
-  async getPeriod(id: number) {
-    const item = await payrollRepository.findPeriodById(id);
+  async getPeriod(organizationId: number, id: number) {
+    const item = await payrollRepository.findPeriodById(organizationId, id);
     if (!item) throw new NotFoundError(`Payroll period with ID ${id} not found`, "PAYROLL_PERIOD_NOT_FOUND");
     return item;
   }
 
-  async createPeriod(data: z.infer<typeof createPayrollPeriodSchema>) {
+  async createPeriod(organizationId: number, data: z.infer<typeof createPayrollPeriodSchema>) {
     const created = await payrollRepository.createPeriod({
+      organizationId,
       name: data.name,
       description: data.description ?? null,
+      startDate: data.startDate ?? null,
+      endDate: data.endDate ?? null,
     });
 
     await logActivity({
@@ -43,9 +47,12 @@ export class PayrollService {
     return created;
   }
 
-  async updatePeriod(id: number, data: z.infer<typeof updatePayrollPeriodSchema>) {
-    await this.getPeriod(id);
-    const updated = await payrollRepository.updatePeriod(id, data);
+  async updatePeriod(organizationId: number, id: number, data: z.infer<typeof updatePayrollPeriodSchema>) {
+    const period = await this.getPeriod(organizationId, id);
+    if (period.status === "finalized" || period.status === "published") {
+      throw new ConflictError("Finalized or published payroll periods are locked", "PAYROLL_ALREADY_FINALIZED");
+    }
+    const updated = await payrollRepository.updatePeriod(organizationId, id, data);
 
     await logActivity({
       action: "PAYROLL_PERIOD_UPDATED",
@@ -55,9 +62,12 @@ export class PayrollService {
     return updated!;
   }
 
-  async deletePeriod(id: number) {
-    await this.getPeriod(id);
-    const deleted = await payrollRepository.deletePeriod(id);
+  async deletePeriod(organizationId: number, id: number) {
+    const period = await this.getPeriod(organizationId, id);
+    if (period.status !== "draft") {
+      throw new ConflictError("Only draft payroll periods can be deleted", "PAYROLL_ALREADY_FINALIZED");
+    }
+    const deleted = await payrollRepository.deletePeriod(organizationId, id);
 
     await logActivity({
       action: "PAYROLL_PERIOD_DELETED",
@@ -67,13 +77,13 @@ export class PayrollService {
     return deleted!;
   }
 
-  async calculatePayroll(id: number) {
-    const period = await this.getPeriod(id);
-
-    // Creates payslip record associated with the calculated period
-    const payslip = await payrollRepository.createPayslip({
-      name: `Payslip - ${period.name}`,
-      description: `Auto-generated payroll calculations for ${period.name}`,
+  async calculatePayroll(organizationId: number, id: number) {
+    const period = await this.getPeriod(organizationId, id);
+    if (period.status === "finalized" || period.status === "published") {
+      throw new ConflictError("Finalized or published payroll periods are locked", "PAYROLL_ALREADY_FINALIZED");
+    }
+    const updated = await payrollRepository.updatePeriod(organizationId, id, {
+      status: "review",
     });
 
     await logActivity({
@@ -82,14 +92,19 @@ export class PayrollService {
     });
 
     return {
-      period,
-      payslip,
-      message: `Payroll for period '${period.name}' calculated successfully`,
+      period: updated,
+      message: `Payroll period '${period.name}' is ready for payslip review`,
     };
   }
 
-  async finalizePayroll(id: number) {
-    const period = await this.getPeriod(id);
+  async finalizePayroll(organizationId: number, id: number) {
+    const period = await this.getPeriod(organizationId, id);
+    if (period.status === "finalized" || period.status === "published") {
+      throw new ConflictError("Payroll is already finalized", "PAYROLL_ALREADY_FINALIZED");
+    }
+    const updated = await payrollRepository.updatePeriod(organizationId, id, {
+      status: "finalized",
+    });
 
     await logActivity({
       action: "PAYROLL_FINALIZED",
@@ -97,7 +112,7 @@ export class PayrollService {
     });
 
     return {
-      period,
+      period: updated,
       message: `Payroll for period '${period.name}' finalized and locked`,
     };
   }
@@ -201,24 +216,45 @@ export class PayrollService {
   }
 
   // Payslips
-  async listPayslips(limit = 50, offset = 0, search?: string) {
+  async listPayslips(organizationId: number, limit = 50, offset = 0, search?: string) {
     const [items, total] = await Promise.all([
-      payrollRepository.findPayslips(limit, offset, search),
-      payrollRepository.countPayslips(search),
+      payrollRepository.findPayslips(organizationId, limit, offset, search),
+      payrollRepository.countPayslips(organizationId, search),
     ]);
     return { items, total };
   }
 
-  async getPayslip(id: number) {
-    const item = await payrollRepository.findPayslipById(id);
+  async getPayslip(organizationId: number, id: number) {
+    const item = await payrollRepository.findPayslipById(organizationId, id);
     if (!item) throw new NotFoundError(`Payslip with ID ${id} not found`, "PAYSLIP_NOT_FOUND");
     return item;
   }
 
-  async createPayslip(data: z.infer<typeof createPayslipSchema>) {
+  async createPayslip(organizationId: number, data: z.infer<typeof createPayslipSchema>) {
+    const [employee, period] = await Promise.all([
+      employeeRepository.findEmployeeById(data.employeeId),
+      this.getPeriod(organizationId, data.payrollPeriodId),
+    ]);
+    if (!employee || employee.organizationId !== organizationId) {
+      throw new NotFoundError("Employee not found", "EMPLOYEE_NOT_FOUND");
+    }
+    if (period.status === "finalized" || period.status === "published") {
+      throw new ConflictError("Finalized or published payroll periods are locked", "PAYROLL_ALREADY_FINALIZED");
+    }
     const created = await payrollRepository.createPayslip({
-      name: data.name,
+      organizationId,
+      employeeId: data.employeeId,
+      payrollPeriodId: data.payrollPeriodId,
+      name: data.name ?? `Payslip - ${period.name}`,
       description: data.description ?? null,
+      month: data.month ?? null,
+      year: data.year ?? null,
+      basicSalary: data.basicSalary ?? null,
+      grossSalary: data.grossSalary,
+      deductions: data.deductions,
+      netSalary: data.netSalary,
+      status: data.status,
+      publishedAt: data.status === "published" ? new Date() : null,
     });
 
     await logActivity({
@@ -229,9 +265,15 @@ export class PayrollService {
     return created;
   }
 
-  async updatePayslip(id: number, data: z.infer<typeof updatePayslipSchema>) {
-    await this.getPayslip(id);
-    const updated = await payrollRepository.updatePayslip(id, data);
+  async updatePayslip(organizationId: number, id: number, data: z.infer<typeof updatePayslipSchema>) {
+    const payslip = await this.getPayslip(organizationId, id);
+    if (payslip.status === "published" || payslip.status === "void") {
+      throw new ConflictError("Published or void payslips are locked", "PAYROLL_ALREADY_FINALIZED");
+    }
+    const updated = await payrollRepository.updatePayslip(organizationId, id, {
+      ...data,
+      publishedAt: data.status === "published" ? new Date() : payslip.publishedAt,
+    });
 
     await logActivity({
       action: "PAYSLIP_UPDATED",
@@ -241,9 +283,12 @@ export class PayrollService {
     return updated!;
   }
 
-  async deletePayslip(id: number) {
-    await this.getPayslip(id);
-    const deleted = await payrollRepository.deletePayslip(id);
+  async deletePayslip(organizationId: number, id: number) {
+    const payslip = await this.getPayslip(organizationId, id);
+    if (payslip.status === "published") {
+      throw new ConflictError("Published payslips cannot be deleted", "PAYROLL_ALREADY_FINALIZED");
+    }
+    const deleted = await payrollRepository.deletePayslip(organizationId, id);
 
     await logActivity({
       action: "PAYSLIP_DELETED",

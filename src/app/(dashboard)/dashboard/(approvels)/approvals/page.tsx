@@ -46,7 +46,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useLeaveRequests, useApproveLeaveRequest, useRejectLeaveRequest } from "@/hooks/use-leave";
-import { useAttendanceCorrections } from "@/hooks/use-attendance";
+import {
+  useAttendanceCorrections,
+  useDecideAttendanceCorrection,
+} from "@/hooks/use-attendance";
 import { useEmployees } from "@/hooks/use-employees";
 
 export default function ApprovalsPage() {
@@ -60,6 +63,7 @@ export default function ApprovalsPage() {
 
   const approveLeaveMutation = useApproveLeaveRequest();
   const rejectLeaveMutation = useRejectLeaveRequest();
+  const decideCorrectionMutation = useDecideAttendanceCorrection();
 
   const leaveRequests = useMemo(() => leaveData?.items ?? [], [leaveData]);
   const corrections = useMemo(
@@ -101,6 +105,30 @@ export default function ApprovalsPage() {
     }
   };
 
+  const handleCorrectionDecision = async (
+    id: number,
+    decision: "approved" | "rejected",
+  ) => {
+    const comment =
+      decision === "rejected"
+        ? window.prompt("Add a rejection comment for the employee:")
+        : undefined;
+    if (decision === "rejected" && !comment?.trim()) return;
+
+    try {
+      await decideCorrectionMutation.mutateAsync({
+        id,
+        decision,
+        comment: comment?.trim(),
+      });
+      toast.success(`Attendance correction #${id} ${decision}`);
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : `Failed to ${decision} correction`,
+      );
+    }
+  };
+
   const filteredLeave = useMemo(() => {
     return leaveRequests.filter((req) => {
       const matchesStatus = statusFilter === "all" || req.status.toLowerCase() === statusFilter.toLowerCase();
@@ -113,13 +141,16 @@ export default function ApprovalsPage() {
 
   const filteredCorrections = useMemo(() => {
     return corrections.filter((c) => {
+      const matchesStatus = statusFilter === "all" || c.status === statusFilter;
       const matchesSearch = !searchQuery || c.userId.toLowerCase().includes(searchQuery.toLowerCase()) || (c.reason && c.reason.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesSearch;
+      return matchesStatus && matchesSearch;
     });
-  }, [corrections, searchQuery]);
+  }, [corrections, searchQuery, statusFilter]);
 
   const pendingLeaveCount = leaveRequests.filter((r) => r.status.toLowerCase() === "pending").length;
-  const pendingCorrectionCount = corrections.length;
+  const pendingCorrectionCount = corrections.filter(
+    (correction) => correction.status === "pending",
+  ).length;
   const loading = leaveLoading || corrLoading;
 
   return (
@@ -343,25 +374,28 @@ export default function ApprovalsPage() {
                     <TableHead>Correction Date</TableHead>
                     <TableHead>Reason / Notes</TableHead>
                     <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Status</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                         Loading attendance corrections...
                       </TableCell>
                     </TableRow>
                   ) : filteredCorrections.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                         No attendance correction requests found.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredCorrections.map((corr) => (
-                      <TableRow key={corr.id}>
+                    filteredCorrections.map((corr) => {
+                      const isPending = corr.status === "pending";
+                      return (
+                        <TableRow key={corr.id}>
                         <TableCell className="font-mono text-sm">
                           {corr.userId}
                         </TableCell>
@@ -374,13 +408,57 @@ export default function ApprovalsPage() {
                         <TableCell className="text-xs text-muted-foreground tabular-nums">
                           {corr.createdAt ? new Date(corr.createdAt).toLocaleDateString() : "-"}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="secondary" className="capitalize">
-                            Logged
+                        <TableCell>
+                          <Badge
+                            variant={
+                              corr.status === "approved"
+                                ? "default"
+                                : corr.status === "rejected"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                            className="capitalize"
+                          >
+                            {corr.status}
                           </Badge>
                         </TableCell>
-                      </TableRow>
-                    ))
+                        <TableCell className="text-right">
+                          {isPending ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                                disabled={decideCorrectionMutation.isPending}
+                                onClick={() =>
+                                  void handleCorrectionDecision(corr.id, "approved")
+                                }
+                              >
+                                <CheckCircle2 className="mr-1 size-3.5" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10"
+                                disabled={decideCorrectionMutation.isPending}
+                                onClick={() =>
+                                  void handleCorrectionDecision(corr.id, "rejected")
+                                }
+                              >
+                                <XCircle className="mr-1 size-3.5" />
+                                Reject
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Processed
+                            </span>
+                          )}
+                        </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>

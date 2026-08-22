@@ -52,3 +52,12 @@ export function requirePermission(context: AuthContext, permission: Permission):
     );
   }
 }
+
+export function requireOrganization(context: AuthContext): number {
+  if (context.organizationId == null) {
+    throw new AuthorizationError(
+      "Your employee profile is not assigned to an organization.",
+    );
+  }
+  return context.organizationId;
+}

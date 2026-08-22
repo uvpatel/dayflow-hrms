@@ -54,7 +54,13 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { useAttendance, useCheckIn, useCheckOut, useTodayAttendance } from "@/hooks/use-attendance";
+import {
+  useAttendance,
+  useCheckIn,
+  useCheckOut,
+  useRequestCorrection,
+  useTodayAttendance,
+} from "@/hooks/use-attendance";
 import { useEmployees } from "@/hooks/use-employees";
 import { useMe } from "@/hooks/use-me";
 
@@ -72,6 +78,13 @@ export default function AttendancePage() {
   const [manualCheckOut, setManualCheckOut] = useState("18:00");
   const [manualStatus, setManualStatus] = useState("present");
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isCorrectionOpen, setIsCorrectionOpen] = useState(false);
+  const [correctionDate, setCorrectionDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
+  const [correctedCheckIn, setCorrectedCheckIn] = useState("09:00");
+  const [correctedCheckOut, setCorrectedCheckOut] = useState("18:00");
+  const [correctionReason, setCorrectionReason] = useState("");
 
   useEffect(() => {
     const updateTime = () => setCurrentTimeStr(new Date().toLocaleTimeString());
@@ -88,6 +101,7 @@ export default function AttendancePage() {
   const checkInMutation = useCheckIn();
   const checkOutMutation = useCheckOut();
   const todayAttendanceQuery = useTodayAttendance();
+  const requestCorrectionMutation = useRequestCorrection();
   const hasCheckedIn = Boolean(todayAttendanceQuery.data?.checkInTime);
   const hasCheckedOut = Boolean(todayAttendanceQuery.data?.checkOutTime);
 
@@ -159,6 +173,31 @@ export default function AttendancePage() {
       }
     } catch {
       toast.error("Failed to submit manual attendance");
+    }
+  };
+
+  const handleCorrectionSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await requestCorrectionMutation.mutateAsync({
+        correctionDate: new Date(`${correctionDate}T12:00:00`).toISOString(),
+        requestedCheckInTime: new Date(
+          `${correctionDate}T${correctedCheckIn}:00`,
+        ).toISOString(),
+        ...(correctedCheckOut && {
+          requestedCheckOutTime: new Date(
+            `${correctionDate}T${correctedCheckOut}:00`,
+          ).toISOString(),
+        }),
+        reason: correctionReason,
+      });
+      toast.success("Attendance correction submitted for review");
+      setCorrectionReason("");
+      setIsCorrectionOpen(false);
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to request correction",
+      );
     }
   };
 
@@ -234,6 +273,78 @@ export default function AttendancePage() {
             <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+
+          <Drawer open={isCorrectionOpen} onOpenChange={setIsCorrectionOpen}>
+            <DrawerTrigger
+              render={<Button size="sm" variant="outline" className="gap-1.5" />}
+            >
+              <Clock3 className="size-4" />
+              Request correction
+            </DrawerTrigger>
+            <DrawerContent>
+              <form onSubmit={handleCorrectionSubmit}>
+                <DrawerHeader>
+                  <DrawerTitle>Request attendance correction</DrawerTitle>
+                  <DrawerDescription>
+                    Enter the corrected punch times. Your manager or HR will review the request.
+                  </DrawerDescription>
+                </DrawerHeader>
+                <div className="mx-auto grid w-full max-w-md gap-4 p-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="correction-date">Work date</Label>
+                    <Input
+                      id="correction-date"
+                      type="date"
+                      max={new Date().toISOString().split("T")[0]}
+                      value={correctionDate}
+                      onChange={(event) => setCorrectionDate(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="corrected-check-in">Correct check-in</Label>
+                      <Input
+                        id="corrected-check-in"
+                        type="time"
+                        value={correctedCheckIn}
+                        onChange={(event) => setCorrectedCheckIn(event.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="corrected-check-out">Correct check-out</Label>
+                      <Input
+                        id="corrected-check-out"
+                        type="time"
+                        value={correctedCheckOut}
+                        onChange={(event) => setCorrectedCheckOut(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="correction-reason">Reason</Label>
+                    <Input
+                      id="correction-reason"
+                      value={correctionReason}
+                      onChange={(event) => setCorrectionReason(event.target.value)}
+                      placeholder="Explain what needs to be corrected"
+                      minLength={3}
+                      required
+                    />
+                  </div>
+                </div>
+                <DrawerFooter className="mx-auto w-full max-w-md">
+                  <Button type="submit" disabled={requestCorrectionMutation.isPending}>
+                    {requestCorrectionMutation.isPending ? "Submitting…" : "Submit request"}
+                  </Button>
+                  <DrawerClose render={<Button variant="outline" />}>
+                    Cancel
+                  </DrawerClose>
+                </DrawerFooter>
+              </form>
+            </DrawerContent>
+          </Drawer>
 
           {canManageAttendance ? (
             <Drawer open={isManualOpen} onOpenChange={setIsManualOpen}>

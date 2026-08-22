@@ -40,6 +40,18 @@ export interface AtomicLeaveDecision {
   comment: string | null;
 }
 
+export interface AtomicLeaveUpdate {
+  requestId: number;
+  employeeId: number;
+  organizationId: number;
+  leaveType: string;
+  startDate: Date;
+  endDate: Date;
+  days: string;
+  unit: "full_day" | "half_day";
+  reason: string | null;
+}
+
 interface IdRow {
   id: number;
 }
@@ -259,20 +271,23 @@ export class TimeOffRepository {
             ${data.days}::numeric(7,2) as days,
             ${data.unit}::text as unit,
             ${data.reason}::text as reason,
-            coalesce(
-              (
-                select leave_type.requires_balance
-                from leave_types as leave_type
-                where leave_type.name = ${data.leaveType}
-                  and (
-                    leave_type.organization_id = ${data.organizationId}
-                    or leave_type.organization_id is null
-                  )
-                order by leave_type.organization_id nulls last
-                limit 1
-              ),
-              lower(${data.leaveType}) not like '%unpaid%'
-            ) as requires_balance
+            case
+              when lower(${data.leaveType}) like '%unpaid%' then false
+              else coalesce(
+                (
+                  select leave_type.requires_balance
+                  from leave_types as leave_type
+                  where leave_type.name = ${data.leaveType}
+                    and (
+                      leave_type.organization_id = ${data.organizationId}
+                      or leave_type.organization_id is null
+                    )
+                  order by leave_type.organization_id nulls last
+                  limit 1
+                ),
+                true
+              )
+            end as requires_balance
         ), inserted as (
           insert into leave_requests (
             employee_id,
@@ -383,25 +398,30 @@ export class TimeOffRepository {
       with target as materialized (
         select
           request.*,
-          coalesce(
-            (
-              select leave_type.requires_balance
-              from leave_types as leave_type
-              where leave_type.name = request.leave_type
-                and (
-                  leave_type.organization_id = request.organization_id
-                  or leave_type.organization_id is null
-                )
-              order by leave_type.organization_id nulls last
-              limit 1
-            ),
-            lower(request.leave_type) not like '%unpaid%'
-          ) as requires_balance
+          case
+            when lower(request.leave_type) like '%unpaid%' then false
+            else coalesce(
+              (
+                select leave_type.requires_balance
+                from leave_types as leave_type
+                where leave_type.name = request.leave_type
+                  and (
+                    leave_type.organization_id = request.organization_id
+                    or leave_type.organization_id is null
+                  )
+                order by leave_type.organization_id nulls last
+                limit 1
+              ),
+              true
+            )
+          end as requires_balance
         from leave_requests as request
         join employees as subject on subject.id = request.employee_id
         where request.id = ${input.requestId}
           and request.status = 'pending'
+          and request.organization_id = ${input.organizationId}
           and subject.organization_id = ${input.organizationId}
+          and subject.organization_id = request.organization_id
           and (
             ${input.actorRole} in ('admin', 'hr')
             or (
@@ -475,6 +495,49 @@ export class TimeOffRepository {
           now()
         from decision_write
         returning id
+      ), attendance_write as (
+        insert into attendances (
+          user_id,
+          employee_id,
+          organization_id,
+          work_date,
+          date,
+          status,
+          created_at,
+          updated_at
+        )
+        select
+          coalesce(subject.user_id, 'employee:' || subject.id),
+          decision_write.employee_id,
+          decision_write.organization_id,
+          work_day::date,
+          work_day::date::timestamptz,
+          case
+            when decision_write.unit = 'half_day' then 'half_day'
+            else 'leave'
+          end,
+          now(),
+          now()
+        from decision_write
+        join employees as subject on subject.id = decision_write.employee_id
+        left join work_schedules as schedule on schedule.id = subject.work_schedule_id
+        cross join lateral generate_series(
+          decision_write.start_date::date,
+          decision_write.end_date::date,
+          interval '1 day'
+        ) as series(work_day)
+        where decision_write.status = 'approved'
+          and extract(isodow from work_day)::integer = any(
+            string_to_array(coalesce(schedule.weekdays, '1,2,3,4,5'), ',')::integer[]
+          )
+        on conflict (employee_id, work_date)
+          where employee_id is not null and work_date is not null
+        do update set
+          status = excluded.status,
+          updated_at = now()
+        where attendances.check_in_time is null
+          and attendances.status <> 'holiday'
+        returning id
       )
       select decision_write.id
       from decision_write
@@ -483,13 +546,18 @@ export class TimeOffRepository {
     return rows[0]?.id ? this.findRequestById(rows[0].id) : null;
   }
 
-  async cancelRequestAtomically(requestId: number, employeeId: number) {
+  async cancelRequestAtomically(
+    requestId: number,
+    employeeId: number,
+    organizationId: number,
+  ) {
     const rows = (await neonSql`
       with cancelled as (
         update leave_requests
         set status = 'cancelled', updated_at = now()
         where id = ${requestId}
           and employee_id = ${employeeId}
+          and organization_id = ${organizationId}
           and status = 'pending'
         returning *
       ), notification_write as (
@@ -516,6 +584,114 @@ export class TimeOffRepository {
       from cancelled
     `) as unknown as IdRow[];
 
+    return rows[0]?.id ? this.findRequestById(rows[0].id) : null;
+  }
+
+  /**
+   * Serializes edits with submissions for the same employee. The write only
+   * succeeds while the request is still pending and both overlap and balance
+   * predicates remain true at the point of update.
+   */
+  async updateRequestAtomically(data: AtomicLeaveUpdate) {
+    const transactionResults = await neonSql.transaction((transactionSql) => [
+      transactionSql`select pg_advisory_xact_lock(${data.employeeId})`,
+      transactionSql`
+        with candidate as (
+          select
+            ${data.requestId}::integer as request_id,
+            ${data.employeeId}::integer as employee_id,
+            ${data.organizationId}::integer as organization_id,
+            ${data.leaveType}::text as leave_type,
+            ${data.startDate.toISOString()}::timestamptz as start_date,
+            ${data.endDate.toISOString()}::timestamptz as end_date,
+            ${data.days}::numeric(7,2) as days,
+            ${data.unit}::text as unit,
+            ${data.reason}::text as reason,
+            case
+              when lower(${data.leaveType}) like '%unpaid%' then false
+              else coalesce(
+                (
+                  select leave_type.requires_balance
+                  from leave_types as leave_type
+                  where leave_type.name = ${data.leaveType}
+                    and leave_type.active
+                    and (
+                      leave_type.organization_id = ${data.organizationId}
+                      or leave_type.organization_id is null
+                    )
+                  order by leave_type.organization_id nulls last
+                  limit 1
+                ),
+                true
+              )
+            end as requires_balance
+        ), eligible as materialized (
+          select request.id
+          from leave_requests as request
+          cross join candidate
+          where request.id = candidate.request_id
+            and request.employee_id = candidate.employee_id
+            and request.organization_id = candidate.organization_id
+            and request.status = 'pending'
+            and not exists (
+              select 1
+              from leave_requests as existing
+              where existing.employee_id = candidate.employee_id
+                and existing.id <> candidate.request_id
+                and existing.status in ('pending', 'approved')
+                and existing.start_date <= candidate.end_date
+                and existing.end_date >= candidate.start_date
+            )
+            and (
+              not candidate.requires_balance
+              or exists (
+                select 1
+                from leave_allocations as allocation
+                where allocation.employee_id = candidate.employee_id
+                  and allocation.leave_type = candidate.leave_type
+                  and allocation.allocated_days - allocation.used_days >= candidate.days
+              )
+            )
+          for update of request
+        ), updated as (
+          update leave_requests as request
+          set
+            leave_type = candidate.leave_type,
+            start_date = candidate.start_date,
+            end_date = candidate.end_date,
+            days = candidate.days,
+            unit = candidate.unit,
+            reason = candidate.reason,
+            updated_at = now()
+          from candidate, eligible
+          where request.id = eligible.id
+          returning request.*
+        ), notification_write as (
+          insert into notifications (user_id, message, read, created_at, updated_at)
+          select
+            updated.employee_id,
+            'Your ' || updated.leave_type || ' leave request was updated.',
+            0,
+            now(),
+            now()
+          from updated
+          returning id
+        ), audit_write as (
+          insert into activity_logs (action, description, created_at, updated_at)
+          select
+            'LEAVE_REQUEST_UPDATED',
+            'Employee #' || updated.employee_id || ' updated leave request #' || updated.id,
+            now(),
+            now()
+          from updated
+          returning id
+        )
+        select updated.id
+        from updated
+      `,
+    ]);
+
+    const rows = transactionResults[1] as unknown as IdRow[];
     return rows[0]?.id ? this.findRequestById(rows[0].id) : null;
   }
 

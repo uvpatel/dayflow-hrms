@@ -2,6 +2,17 @@
 
 Dayflow uses Bun's test runner, TypeScript, ESLint, and the Next.js production compiler. Tests are intentionally divided between pure authorization/domain tests, which run without a database, and database-backed workflow checks, which require a disposable development database.
 
+## Current verification status
+
+At the 2026-08-22 documentation checkpoint:
+
+- `bun test` passed **20 tests, 0 failed, 56 assertions** across two files.
+- `tests/permissions.test.ts` contains 12 permission, auth-schema, page-policy, and redirect tests.
+- `tests/business-domain.test.ts` contains 8 attendance, manager-assignment, and leave-rule tests.
+- The latest Drizzle migration was generated at `drizzle/20260822083351_worthless_mister_fear`.
+- No migration, seed, database-backed route test, concurrent workflow test, or rollback test was executed.
+- Lint, typecheck, and production-build results are separate quality gates and are not implied by the unit-test result.
+
 ## Safe local verification
 
 These commands do not mutate the database:
@@ -19,9 +30,15 @@ Run a focused test file with:
 bun test tests/permissions.test.ts
 ```
 
+The focused domain suite is:
+
+```bash
+bun test tests/business-domain.test.ts
+```
+
 ## Database verification
 
-Never run migrations or the seed against an unconfirmed shared or production database. After setting `DATABASE_URL` to a disposable development branch:
+Never run migrations or the seed against an unconfirmed shared or production database. Generation is non-mutating and has already produced the latest artifact; application and seed execution remain pending. After setting `DATABASE_URL` to a disposable development branch:
 
 ```bash
 bun run db:generate
@@ -33,21 +50,36 @@ Run `db:generate` before `db:migrate` when a Drizzle schema changed, inspect the
 
 ## Test coverage
 
-The automated suite covers:
+The current pure unit suite covers:
 
 - Role normalization and route/permission policy.
-- Employee isolation from other employees' payroll and private records.
-- Manager team access without organization-wide payroll permission.
+- Employee-resource scope decisions, including payroll isolation.
+- Manager team scope without organization-wide payroll permission.
 - HR and administrator management boundaries.
-- Better Auth account columns required by GitHub OAuth.
+- The Better Auth `account.issuer` schema mapping required by the installed adapter.
 - Post-authentication routing for known and unknown roles.
 - Attendance transition and duration rules.
 - Employee-manager self/cycle validation.
 - Leave date, overlap, balance, and decision rules.
 
-Database route handlers should additionally be exercised against a disposable branch for concurrent check-in uniqueness and transaction rollback behavior. Those checks are not claimed as executed unless the test report explicitly names the database environment.
+These are pure-function and schema-shape tests. They do not issue HTTP requests or SQL and therefore do not prove route-handler guards, foreign keys, generated migration compatibility, transaction rollback, or concurrent uniqueness.
+
+Database route handlers should additionally be exercised against a disposable branch for:
+
+- Auth signup, verification, signin, reset, session expiry, rate limits, and OAuth callback/error handling.
+- Tenant and row isolation for employee, manager, HR, and administrator accounts.
+- Concurrent check-in uniqueness and competing check-out behavior.
+- Attendance correction ownership and review transitions.
+- Leave overlap, pending-only cancellation, required rejection comments, atomic balance updates, notification/audit writes, and rollback on failure.
+- Payroll period state transitions, publication visibility, locking, decimal accuracy, and cross-organization isolation.
+- Migration preflight with representative duplicate, orphaned, and malformed legacy data.
+- Repeat seed execution without duplicate logical records.
+
+None of those database-backed checks is claimed as executed unless a test report names the disposable database environment.
 
 ## Manual workflow checklist
+
+This checklist is a recommended verification run, not a record of completed testing.
 
 Use separate employee, manager, HR, and administrator development accounts.
 
@@ -64,4 +96,4 @@ Use separate employee, manager, HR, and administrator development accounts.
 
 ## Release gate
 
-A change is ready only when all four non-mutating commands exit successfully and generated migration SQL has been reviewed. Warnings must be resolved rather than hidden with `any`, `@ts-ignore`, disabled lint rules, or fake responses.
+A release candidate is ready for database staging only when all four non-mutating commands exit successfully and generated migration SQL has been reviewed. Production release additionally requires the disposable-database workflow checks above, representative-data migration validation, and closure of the known limitations in `README.md` and `IMPLEMENTATION_PLAN.md`. Warnings must be resolved rather than hidden with `any`, `@ts-ignore`, disabled lint rules, or fake responses.

@@ -58,5 +58,28 @@ export const updateLeaveRequestSchema = z.object({
     .transform((val) => new Date(val))
     .optional(),
   reason: z.string().optional(),
-  status: z.enum(["pending", "approved", "rejected", "cancelled"]).optional(),
+  unit: z.enum(["full_day", "half_day"]).optional(),
 });
+
+export const approveLeaveRequestSchema = z.object({
+  comment: z.string().trim().optional(),
+});
+
+export const rejectLeaveRequestSchema = z.object({
+  reason: z.string().trim().min(1, "A rejection comment is required"),
+});
+
+export const decideLeaveRequestSchema = z
+  .object({
+    decision: z.enum(["approved", "rejected"]),
+    comment: z.string().trim().optional(),
+  })
+  .superRefine((data, context) => {
+    if (data.decision === "rejected" && !data.comment) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["comment"],
+        message: "A rejection comment is required",
+      });
+    }
+  });

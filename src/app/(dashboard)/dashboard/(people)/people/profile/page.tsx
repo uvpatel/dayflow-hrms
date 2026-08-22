@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { useMe, useUpdateMe } from "@/hooks/use-me";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,51 +10,38 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { User, Mail, Shield, Calendar, Loader2, Save } from "lucide-react";
+import { User, Mail, Phone, Shield, Calendar, Loader2, Save } from "lucide-react";
 
 export default function UserProfilePage() {
-  const { data: session, isPending, refetch } = authClient.useSession();
-  const [name, setName] = useState<string | undefined>();
-  const [isUpdating, setIsUpdating] = useState(false);
+  const { data: session, isPending } = authClient.useSession();
+  const { data: me } = useMe();
+  const updateMe = useUpdateMe();
+  const [phoneNumber, setPhoneNumber] = useState<string | undefined>();
 
   const user = session?.user;
-  const displayName = name ?? user?.name ?? "";
-  const userRole = (user as { role?: string })?.role || "user";
-  const initials = user?.name
-    ? user.name.slice(0, 2).toUpperCase()
+  const displayName = me?.employee
+    ? `${me.employee.firstName} ${me.employee.lastName}`.trim()
+    : user?.name ?? "";
+  const displayPhone = phoneNumber ?? me?.employee?.phoneNumber ?? "";
+  const userRole = me?.employee?.role || (user as { role?: string })?.role || "employee";
+  const initials = displayName
+    ? displayName.slice(0, 2).toUpperCase()
     : user?.email?.slice(0, 2).toUpperCase() || "U";
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!displayName.trim()) {
-      toast.error("Name cannot be empty");
+    if (displayPhone.trim().length < 5) {
+      toast.error("Enter a valid phone number");
       return;
     }
 
-    setIsUpdating(true);
     try {
-      const parts = displayName.trim().split(/\s+/);
-      const firstName = parts[0] || "";
-      const lastName = parts.slice(1).join(" ") || "";
-
-      const res = await fetch("/api/v1/me", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success("Profile details saved successfully");
-        setName(undefined);
-        refetch();
-      } else {
-        toast.error(data.error || "Failed to update profile");
-      }
+      await updateMe.mutateAsync({ phoneNumber: displayPhone.trim() });
+      toast.success("Contact details saved successfully");
+      setPhoneNumber(undefined);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to update profile";
       toast.error(msg);
-    } finally {
-      setIsUpdating(false);
     }
   };
 
@@ -87,7 +75,7 @@ export default function UserProfilePage() {
             </Avatar>
 
             <div className="space-y-1 w-full">
-              <h2 className="text-lg font-semibold text-foreground truncate">{user?.name || "User"}</h2>
+              <h2 className="text-lg font-semibold text-foreground truncate">{displayName || "User"}</h2>
               <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
 
@@ -131,9 +119,28 @@ export default function UserProfilePage() {
                       id="displayName"
                       className="pl-9 text-sm"
                       value={displayName}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Your full name"
-                      disabled={isUpdating}
+                      readOnly
+                      disabled
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Name changes are managed by HR.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="phoneNumber" className="text-xs font-medium">
+                    Phone Number
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                    <Input
+                      id="phoneNumber"
+                      className="pl-9 text-sm"
+                      value={displayPhone}
+                      onChange={(event) => setPhoneNumber(event.target.value)}
+                      placeholder="Your phone number"
+                      disabled={updateMe.isPending}
                     />
                   </div>
                 </div>
@@ -175,8 +182,8 @@ export default function UserProfilePage() {
               </CardContent>
 
               <CardFooter className="flex justify-end gap-2 border-t pt-4">
-                <Button type="submit" size="sm" className="gap-1.5 text-xs" disabled={isUpdating}>
-                  {isUpdating ? (
+                <Button type="submit" size="sm" className="gap-1.5 text-xs" disabled={updateMe.isPending}>
+                  {updateMe.isPending ? (
                     <>
                       <Loader2 className="size-3.5 animate-spin" />
                       Saving...

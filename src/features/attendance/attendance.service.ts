@@ -19,6 +19,7 @@ import {
 import { attendanceRepository, type AttendanceScope } from "./attendance.repository";
 import {
   createCorrectionSchema,
+  decideCorrectionSchema,
   manualAttendanceSchema,
   updateAttendanceSchema,
   updateCorrectionSchema,
@@ -31,7 +32,9 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 export class AttendanceService {
-  private requireEmployee(authContext: AuthContext) {
+  private requireEmployee(
+    authContext: AuthContext,
+  ): NonNullable<AuthContext["employee"]> & { organizationId: number } {
     const employee = authContext.employee;
     if (!employee) {
       throw new NotFoundError(
@@ -47,7 +50,9 @@ export class AttendanceService {
         "Your employee profile is not assigned to an organization",
       );
     }
-    return employee;
+    return employee as NonNullable<AuthContext["employee"]> & {
+      organizationId: number;
+    };
   }
 
   private async assertCanReadEmployeeRecord(
@@ -161,7 +166,24 @@ export class AttendanceService {
       throw new ConflictError("No active check-in record was found.", "NOT_CHECKED_IN");
     }
 
-    const schedule = await this.scheduleRules(authContext, now);
+    const currentSchedule = await this.scheduleRules(authContext, now);
+    const scheduledMinutes =
+      openRecord.scheduledStartMinutes != null &&
+      openRecord.scheduledEndMinutes != null
+        ? Math.max(
+            1,
+            openRecord.scheduledEndMinutes -
+              openRecord.scheduledStartMinutes -
+              openRecord.breakMinutes,
+          )
+        : currentSchedule.fullDayMinutes;
+    const schedule = {
+      ...currentSchedule,
+      timezone: openRecord.scheduleTimezone,
+      breakMinutes: openRecord.breakMinutes,
+      fullDayMinutes: scheduledMinutes,
+      halfDayMinutes: Math.max(1, Math.floor(scheduledMinutes / 2)),
+    };
     let calculation;
     try {
       calculation = calculateAttendance(openRecord.checkInTime, now, schedule);
@@ -171,13 +193,18 @@ export class AttendanceService {
       );
     }
 
-    const updated = await attendanceRepository.closeOpenAttendance(employee.id, now, {
-      breakMinutes: calculation.breakMinutes,
-      workMinutes: calculation.workMinutes,
-      overtimeMinutes: calculation.overtimeMinutes,
-      workHours: calculation.workHours,
-      status: calculation.status,
-    });
+    const updated = await attendanceRepository.closeOpenAttendance(
+      openRecord.id,
+      employee.id,
+      now,
+      {
+        breakMinutes: calculation.breakMinutes,
+        workMinutes: calculation.workMinutes,
+        overtimeMinutes: calculation.overtimeMinutes,
+        workHours: calculation.workHours,
+        status: calculation.status,
+      },
+    );
     if (!updated) {
       throw new ConflictError("Attendance was already checked out.", "NOT_CHECKED_IN");
     }
@@ -317,6 +344,16 @@ export class AttendanceService {
           "The referenced attendance record does not belong to you",
         );
       }
+      const timezone = await attendanceRepository.findOrganizationTimezone(
+        employee.organizationId,
+      );
+      const attendanceWorkDate =
+        attendance.workDate ?? getWorkDate(attendance.date, timezone);
+      if (attendanceWorkDate !== getWorkDate(data.correctionDate, timezone)) {
+        throw new BusinessRuleError(
+          "The correction date must match the referenced attendance workday",
+        );
+      }
     }
     return attendanceRepository.createCorrection({
       userId: authContext.user.id,
@@ -329,6 +366,159 @@ export class AttendanceService {
       reason: data.reason,
       status: "pending",
     });
+  }
+
+  async decideCorrection(
+    authContext: AuthContext,
+    id: number,
+    data: z.infer<typeof decideCorrectionSchema>,
+  ) {
+    const reviewer = this.requireEmployee(authContext);
+    const correction = await attendanceRepository.findCorrectionById(id);
+    if (!correction || correction.employeeId == null || correction.organizationId == null) {
+      throw new NotFoundError(
+        `Attendance correction with ID ${id} not found`,
+        "NOT_FOUND",
+      );
+    }
+
+    const subject = await employeeRepository.findEmployeeById(correction.employeeId);
+    const canReview =
+      subject?.organizationId === reviewer.organizationId &&
+      correction.organizationId === reviewer.organizationId &&
+      ((authContext.role === "admin" || authContext.role === "hr") ||
+        (authContext.role === "manager" && subject.managerId === reviewer.id));
+    if (!subject || !canReview) {
+      throw new AuthorizationError(
+        "Only HR, administrators, or the assigned reporting manager can decide this correction",
+      );
+    }
+    if (correction.status !== "pending") {
+      throw new ConflictError(
+        `Attendance correction is already '${correction.status}'`,
+        "CONFLICT",
+      );
+    }
+
+    const comment = data.comment?.trim() || null;
+    if (data.decision === "rejected" && !comment) {
+      throw new BusinessRuleError("A comment is required when rejecting a correction");
+    }
+
+    const currentScheduleRecord = await attendanceRepository.findSchedule(
+      subject.id,
+      subject.workScheduleId,
+      correction.correctionDate,
+    );
+    const organizationTimezone = await attendanceRepository.findOrganizationTimezone(
+      reviewer.organizationId,
+    );
+    const currentSchedule = currentScheduleRecord
+      ? {
+          timezone: currentScheduleRecord.timezone,
+          shiftStartMinutes: currentScheduleRecord.shiftStartMinutes,
+          shiftEndMinutes: currentScheduleRecord.shiftEndMinutes,
+          breakMinutes: currentScheduleRecord.breakMinutes,
+          fullDayMinutes: currentScheduleRecord.fullDayMinutes,
+          halfDayMinutes: currentScheduleRecord.halfDayMinutes,
+          graceMinutes: currentScheduleRecord.graceMinutes,
+        }
+      : defaultAttendanceSchedule(organizationTimezone);
+    const workDate = getWorkDate(correction.correctionDate, currentSchedule.timezone);
+
+    let attendance = correction.attendanceId
+      ? await attendanceRepository.findAttendanceById(correction.attendanceId)
+      : await attendanceRepository.findAttendanceForWorkDate(subject.id, workDate);
+    if (
+      attendance &&
+      (attendance.employeeId !== subject.id ||
+        attendance.organizationId !== reviewer.organizationId)
+    ) {
+      throw new AuthorizationError(
+        "The correction references attendance outside the employee's organization",
+      );
+    }
+
+    const checkInTime =
+      correction.requestedCheckInTime ?? attendance?.checkInTime ?? null;
+    const checkOutTime =
+      correction.requestedCheckOutTime ?? attendance?.checkOutTime ?? null;
+    if (data.decision === "approved" && !checkInTime) {
+      throw new BusinessRuleError(
+        "An approved correction must resolve to a check-in time",
+      );
+    }
+    if (
+      data.decision === "approved" &&
+      checkInTime &&
+      checkOutTime &&
+      checkOutTime.getTime() <= checkInTime.getTime()
+    ) {
+      throw new BusinessRuleError("Corrected check-out must be after check-in");
+    }
+
+    const snapshotMinutes =
+      attendance?.scheduledStartMinutes != null &&
+      attendance.scheduledEndMinutes != null
+        ? Math.max(
+            1,
+            attendance.scheduledEndMinutes -
+              attendance.scheduledStartMinutes -
+              attendance.breakMinutes,
+          )
+        : currentSchedule.fullDayMinutes;
+    const schedule = attendance
+      ? {
+          ...currentSchedule,
+          timezone: attendance.scheduleTimezone,
+          breakMinutes: attendance.breakMinutes,
+          fullDayMinutes: snapshotMinutes,
+          halfDayMinutes: Math.max(1, Math.floor(snapshotMinutes / 2)),
+        }
+      : currentSchedule;
+    const calculation =
+      checkInTime && checkOutTime
+        ? calculateAttendance(checkInTime, checkOutTime, schedule)
+        : null;
+
+    const decided = await attendanceRepository.decideCorrectionAtomically({
+      correctionId: id,
+      employeeId: subject.id,
+      organizationId: reviewer.organizationId,
+      reviewerId: reviewer.id,
+      decision: data.decision,
+      comment,
+      attendanceId: attendance?.id ?? null,
+      attendanceUserId: subject.userId ?? `employee:${subject.id}`,
+      workDate,
+      attendanceDate: attendance?.date ?? correction.correctionDate,
+      checkInTime,
+      checkOutTime,
+      breakMinutes: calculation?.breakMinutes ?? schedule.breakMinutes,
+      workMinutes: calculation?.workMinutes ?? null,
+      overtimeMinutes: calculation?.overtimeMinutes ?? 0,
+      workHours: calculation?.workHours ?? null,
+      status: calculation?.status ?? "present",
+      scheduledStartMinutes:
+        attendance?.scheduledStartMinutes ?? schedule.shiftStartMinutes,
+      scheduledEndMinutes:
+        attendance?.scheduledEndMinutes ?? schedule.shiftEndMinutes,
+      scheduleTimezone: schedule.timezone,
+      isLate: checkInTime ? isLateCheckIn(checkInTime, schedule) : false,
+    });
+    if (decided) return decided;
+
+    const latest = await attendanceRepository.findCorrectionById(id);
+    if (latest?.status && latest.status !== "pending") {
+      throw new ConflictError(
+        `Attendance correction is already '${latest.status}'`,
+        "CONFLICT",
+      );
+    }
+    throw new ConflictError(
+      "Attendance changed while the correction was being reviewed; refresh and try again",
+      "CONFLICT",
+    );
   }
 
   async updateCorrection(id: number, data: z.infer<typeof updateCorrectionSchema>) {

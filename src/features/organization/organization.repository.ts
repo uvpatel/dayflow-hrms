@@ -6,8 +6,9 @@ import {
   locations,
   holidays,
   workSchedules,
+  employees,
 } from "@/db/schema";
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, ilike, inArray, or } from "drizzle-orm";
 import {
   NewOrganization,
   NewDepartment,
@@ -51,184 +52,311 @@ export class OrganizationRepository {
   }
 
   // Departments
-  async findDepartments(limit = 50, offset = 0, search?: string) {
-    const where = search
+  async findDepartments(organizationId: number, limit = 50, offset = 0, search?: string) {
+    const searchCondition = search
       ? or(ilike(departments.name, `%${search}%`), ilike(departments.description, `%${search}%`))
       : undefined;
     return await db
       .select()
       .from(departments)
-      .where(where)
+      .where(
+        searchCondition
+          ? and(eq(departments.organizationId, organizationId), searchCondition)
+          : eq(departments.organizationId, organizationId),
+      )
       .orderBy(desc(departments.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findDepartmentById(id: number) {
-    const [item] = await db.select().from(departments).where(eq(departments.id, id));
+  async findDepartmentById(organizationId: number, id: number) {
+    const [item] = await db
+      .select()
+      .from(departments)
+      .where(and(eq(departments.id, id), eq(departments.organizationId, organizationId)));
     return item ?? null;
   }
 
-  async createDepartment(data: NewDepartment) {
-    const [created] = await db.insert(departments).values(data).returning();
+  async createDepartment(
+    organizationId: number,
+    data: Omit<NewDepartment, "organizationId">,
+  ) {
+    const [created] = await db
+      .insert(departments)
+      .values({ ...data, organizationId })
+      .returning();
     return created;
   }
 
-  async updateDepartment(id: number, data: Partial<NewDepartment>) {
+  async updateDepartment(
+    organizationId: number,
+    id: number,
+    data: Partial<Omit<NewDepartment, "organizationId">>,
+  ) {
     const [updated] = await db
       .update(departments)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(departments.id, id))
+      .where(and(eq(departments.id, id), eq(departments.organizationId, organizationId)))
       .returning();
     return updated ?? null;
   }
 
-  async deleteDepartment(id: number) {
-    const [deleted] = await db.delete(departments).where(eq(departments.id, id)).returning();
+  async deleteDepartment(organizationId: number, id: number) {
+    const [deleted] = await db
+      .delete(departments)
+      .where(and(eq(departments.id, id), eq(departments.organizationId, organizationId)))
+      .returning();
     return deleted ?? null;
   }
 
   // Designations
-  async findDesignations(limit = 50, offset = 0, search?: string) {
-    const where = search ? ilike(designations.name, `%${search}%`) : undefined;
+  async findDesignations(organizationId: number, limit = 50, offset = 0, search?: string) {
+    const searchCondition = search ? ilike(designations.name, `%${search}%`) : undefined;
     return await db
       .select()
       .from(designations)
-      .where(where)
+      .where(
+        searchCondition
+          ? and(eq(designations.organizationId, organizationId), searchCondition)
+          : eq(designations.organizationId, organizationId),
+      )
       .orderBy(desc(designations.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findDesignationById(id: number) {
-    const [item] = await db.select().from(designations).where(eq(designations.id, id));
+  async findDesignationById(organizationId: number, id: number) {
+    const [item] = await db
+      .select()
+      .from(designations)
+      .where(and(eq(designations.id, id), eq(designations.organizationId, organizationId)));
     return item ?? null;
   }
 
-  async createDesignation(data: NewDesignation) {
-    const [created] = await db.insert(designations).values(data).returning();
+  async createDesignation(
+    organizationId: number,
+    data: Omit<NewDesignation, "organizationId">,
+  ) {
+    const [created] = await db
+      .insert(designations)
+      .values({ ...data, organizationId })
+      .returning();
     return created;
   }
 
-  async updateDesignation(id: number, data: Partial<NewDesignation>) {
+  async updateDesignation(
+    organizationId: number,
+    id: number,
+    data: Partial<Omit<NewDesignation, "organizationId">>,
+  ) {
     const [updated] = await db
       .update(designations)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(designations.id, id))
+      .where(and(eq(designations.id, id), eq(designations.organizationId, organizationId)))
       .returning();
     return updated ?? null;
   }
 
-  async deleteDesignation(id: number) {
-    const [deleted] = await db.delete(designations).where(eq(designations.id, id)).returning();
+  async deleteDesignation(organizationId: number, id: number) {
+    const [deleted] = await db
+      .delete(designations)
+      .where(and(eq(designations.id, id), eq(designations.organizationId, organizationId)))
+      .returning();
     return deleted ?? null;
   }
 
   // Locations
-  async findLocations(limit = 50, offset = 0, search?: string) {
-    const where = search ? ilike(locations.name, `%${search}%`) : undefined;
+  async findLocations(organizationId: number, limit = 50, offset = 0, search?: string) {
+    const searchCondition = search ? ilike(locations.name, `%${search}%`) : undefined;
     return await db
       .select()
       .from(locations)
-      .where(where)
+      .where(
+        searchCondition
+          ? and(eq(locations.organizationId, organizationId), searchCondition)
+          : eq(locations.organizationId, organizationId),
+      )
       .orderBy(desc(locations.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findLocationById(id: number) {
-    const [item] = await db.select().from(locations).where(eq(locations.id, id));
+  async findLocationById(organizationId: number, id: number) {
+    const [item] = await db
+      .select()
+      .from(locations)
+      .where(and(eq(locations.id, id), eq(locations.organizationId, organizationId)));
     return item ?? null;
   }
 
-  async createLocation(data: NewLocation) {
-    const [created] = await db.insert(locations).values(data).returning();
+  async createLocation(organizationId: number, data: Omit<NewLocation, "organizationId">) {
+    const [created] = await db
+      .insert(locations)
+      .values({ ...data, organizationId })
+      .returning();
     return created;
   }
 
-  async updateLocation(id: number, data: Partial<NewLocation>) {
+  async updateLocation(
+    organizationId: number,
+    id: number,
+    data: Partial<Omit<NewLocation, "organizationId">>,
+  ) {
     const [updated] = await db
       .update(locations)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(locations.id, id))
+      .where(and(eq(locations.id, id), eq(locations.organizationId, organizationId)))
       .returning();
     return updated ?? null;
   }
 
-  async deleteLocation(id: number) {
-    const [deleted] = await db.delete(locations).where(eq(locations.id, id)).returning();
+  async deleteLocation(organizationId: number, id: number) {
+    const [deleted] = await db
+      .delete(locations)
+      .where(and(eq(locations.id, id), eq(locations.organizationId, organizationId)))
+      .returning();
     return deleted ?? null;
   }
 
   // Holidays
-  async findHolidays(limit = 50, offset = 0, search?: string) {
-    const where = search ? ilike(holidays.name, `%${search}%`) : undefined;
+  async findHolidays(organizationId: number, limit = 50, offset = 0, search?: string) {
+    const searchCondition = search ? ilike(holidays.name, `%${search}%`) : undefined;
     return await db
       .select()
       .from(holidays)
-      .where(where)
+      .where(
+        searchCondition
+          ? and(eq(holidays.organizationId, organizationId), searchCondition)
+          : eq(holidays.organizationId, organizationId),
+      )
       .orderBy(desc(holidays.holidayDate))
       .limit(limit)
       .offset(offset);
   }
 
-  async findHolidayById(id: number) {
-    const [item] = await db.select().from(holidays).where(eq(holidays.id, id));
+  async findHolidayById(organizationId: number, id: number) {
+    const [item] = await db
+      .select()
+      .from(holidays)
+      .where(and(eq(holidays.id, id), eq(holidays.organizationId, organizationId)));
     return item ?? null;
   }
 
-  async createHoliday(data: NewHoliday) {
-    const [created] = await db.insert(holidays).values(data).returning();
+  async createHoliday(organizationId: number, data: Omit<NewHoliday, "organizationId">) {
+    const [created] = await db
+      .insert(holidays)
+      .values({ ...data, organizationId })
+      .returning();
     return created;
   }
 
-  async updateHoliday(id: number, data: Partial<NewHoliday>) {
+  async updateHoliday(
+    organizationId: number,
+    id: number,
+    data: Partial<Omit<NewHoliday, "organizationId">>,
+  ) {
     const [updated] = await db
       .update(holidays)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(holidays.id, id))
+      .where(and(eq(holidays.id, id), eq(holidays.organizationId, organizationId)))
       .returning();
     return updated ?? null;
   }
 
-  async deleteHoliday(id: number) {
-    const [deleted] = await db.delete(holidays).where(eq(holidays.id, id)).returning();
+  async deleteHoliday(organizationId: number, id: number) {
+    const [deleted] = await db
+      .delete(holidays)
+      .where(and(eq(holidays.id, id), eq(holidays.organizationId, organizationId)))
+      .returning();
     return deleted ?? null;
   }
 
   // Work Schedules
-  async findWorkSchedules(limit = 50, offset = 0, employeeId?: number) {
-    const where = employeeId ? eq(workSchedules.employeeId, employeeId) : undefined;
+  async findWorkSchedules(
+    organizationId: number,
+    limit = 50,
+    offset = 0,
+    employeeIds?: number[],
+  ) {
+    if (employeeIds?.length === 0) return [];
+
+    const where = employeeIds
+      ? and(
+          eq(employees.organizationId, organizationId),
+          inArray(workSchedules.employeeId, employeeIds),
+        )
+      : eq(employees.organizationId, organizationId);
     return await db
-      .select()
+      .select(getTableColumns(workSchedules))
       .from(workSchedules)
+      .innerJoin(employees, eq(workSchedules.employeeId, employees.id))
       .where(where)
       .orderBy(desc(workSchedules.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findWorkScheduleById(id: number) {
-    const [item] = await db.select().from(workSchedules).where(eq(workSchedules.id, id));
+  async findWorkScheduleById(organizationId: number, id: number) {
+    const [item] = await db
+      .select(getTableColumns(workSchedules))
+      .from(workSchedules)
+      .innerJoin(employees, eq(workSchedules.employeeId, employees.id))
+      .where(and(eq(workSchedules.id, id), eq(employees.organizationId, organizationId)));
     return item ?? null;
   }
 
-  async createWorkSchedule(data: NewWorkSchedule) {
+  async createWorkSchedule(organizationId: number, data: NewWorkSchedule) {
+    const [employee] = await db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(
+        and(
+          eq(employees.id, data.employeeId),
+          eq(employees.organizationId, organizationId),
+        ),
+      );
+    if (!employee) return null;
+
     const [created] = await db.insert(workSchedules).values(data).returning();
-    return created;
+    return created ?? null;
   }
 
-  async updateWorkSchedule(id: number, data: Partial<NewWorkSchedule>) {
+  async updateWorkSchedule(
+    organizationId: number,
+    id: number,
+    data: Partial<Omit<NewWorkSchedule, "employeeId">>,
+  ) {
+    const organizationEmployeeIds = db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(eq(employees.organizationId, organizationId));
     const [updated] = await db
       .update(workSchedules)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(workSchedules.id, id))
+      .where(
+        and(
+          eq(workSchedules.id, id),
+          inArray(workSchedules.employeeId, organizationEmployeeIds),
+        ),
+      )
       .returning();
     return updated ?? null;
   }
 
-  async deleteWorkSchedule(id: number) {
-    const [deleted] = await db.delete(workSchedules).where(eq(workSchedules.id, id)).returning();
+  async deleteWorkSchedule(organizationId: number, id: number) {
+    const organizationEmployeeIds = db
+      .select({ id: employees.id })
+      .from(employees)
+      .where(eq(employees.organizationId, organizationId));
+    const [deleted] = await db
+      .delete(workSchedules)
+      .where(
+        and(
+          eq(workSchedules.id, id),
+          inArray(workSchedules.employeeId, organizationEmployeeIds),
+        ),
+      )
+      .returning();
     return deleted ?? null;
   }
 }

@@ -8,7 +8,7 @@ import {
   validateBody,
   validateParams,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import { getAuthContext, requireOrganization, requirePermission } from "@/lib/auth/session";
 
 const periodIdParamSchema = z.object({
   periodId: z
@@ -27,9 +27,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:read:any");
+    const organizationId = requireOrganization(authContext);
 
     const { periodId } = await validateParams(params, periodIdParamSchema);
-    const item = await payrollService.getPeriod(periodId);
+    const item = await payrollService.getPeriod(organizationId, periodId);
 
     return successResponse(item, undefined, `Payroll period ${periodId} fetched successfully`);
   } catch (error) {
@@ -41,10 +42,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { periodId } = await validateParams(params, periodIdParamSchema);
     const data = await validateBody(request, updatePayrollPeriodSchema);
-    const updated = await payrollService.updatePeriod(periodId, data);
+    const updated = await payrollService.updatePeriod(organizationId, periodId, data);
 
     return successResponse(updated, undefined, `Payroll period ${periodId} updated successfully`);
   } catch (error) {
@@ -56,9 +58,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { periodId } = await validateParams(params, periodIdParamSchema);
-    const deleted = await payrollService.deletePeriod(periodId);
+    const deleted = await payrollService.deletePeriod(organizationId, periodId);
 
     return successResponse(deleted, undefined, `Payroll period ${periodId} deleted successfully`);
   } catch (error) {

@@ -4,7 +4,7 @@ import { z } from "zod";
 export const createOrganizationSchema = z.object({
   name: z.string().min(2, "Organization name must be at least 2 characters"),
   description: z.string().optional(),
-});
+}).strict();
 
 export const updateOrganizationSchema = createOrganizationSchema.partial();
 
@@ -12,7 +12,8 @@ export const updateOrganizationSchema = createOrganizationSchema.partial();
 export const createDepartmentSchema = z.object({
   name: z.string().min(2, "Department name must be at least 2 characters"),
   description: z.string().optional(),
-});
+  managerId: z.number().int().positive().nullable().optional(),
+}).strict();
 
 export const updateDepartmentSchema = createDepartmentSchema.partial();
 
@@ -20,8 +21,8 @@ export const updateDepartmentSchema = createDepartmentSchema.partial();
 export const createDesignationSchema = z.object({
   name: z.string().min(2, "Designation name must be at least 2 characters"),
   description: z.string().optional(),
-  departmentId: z.number().int().positive().optional(),
-});
+  departmentId: z.number().int().positive().nullable().optional(),
+}).strict();
 
 export const updateDesignationSchema = createDesignationSchema.partial();
 
@@ -32,7 +33,7 @@ export const createLocationSchema = z.object({
   address: z.string().optional(),
   city: z.string().optional(),
   country: z.string().optional(),
-});
+}).strict();
 
 export const updateLocationSchema = createLocationSchema.partial();
 
@@ -41,7 +42,7 @@ export const createHolidaySchema = z.object({
   name: z.string().min(2, "Holiday name must be at least 2 characters"),
   description: z.string().optional(),
   holidayDate: z.string().or(z.date()).transform((val) => new Date(val)),
-});
+}).strict();
 
 export const updateHolidaySchema = z.object({
   name: z.string().min(2).optional(),
@@ -51,7 +52,7 @@ export const updateHolidaySchema = z.object({
     .or(z.date())
     .transform((val) => new Date(val))
     .optional(),
-});
+}).strict();
 
 // Work Schedule
 export const createWorkScheduleSchema = z.object({
@@ -63,7 +64,7 @@ export const createWorkScheduleSchema = z.object({
     .or(z.date())
     .transform((val) => new Date(val))
     .optional(),
-});
+}).strict();
 
 export const updateWorkScheduleSchema = z.object({
   scheduleName: z.string().min(2).optional(),
@@ -77,4 +78,4 @@ export const updateWorkScheduleSchema = z.object({
     .or(z.date())
     .transform((val) => new Date(val))
     .optional(),
-});
+}).strict();

@@ -25,15 +25,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const [employee] = await db.select().from(employees).where(eq(employees.id, employeeId));
-    if (!employee) {
+    if (!employee || employee.organizationId !== authContext.organizationId) {
       throw new NotFoundError(`Employee with ID ${employeeId} not found`, "EMPLOYEE_NOT_FOUND");
     }
+
+    const canManagePayroll =
+      authContext.role === "admin" || authContext.role === "hr";
 
     const records = await db
       .select()
       .from(payslips)
       .where(and(
         eq(payslips.employeeId, employeeId),
+        ...(!canManagePayroll ? [eq(payslips.status, "published")] : []),
         ...(authContext.organizationId
           ? [eq(payslips.organizationId, authContext.organizationId)]
           : []),

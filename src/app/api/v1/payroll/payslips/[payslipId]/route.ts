@@ -8,7 +8,7 @@ import {
   validateBody,
   validateParams,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import { getAuthContext, requireOrganization, requirePermission } from "@/lib/auth/session";
 
 const payslipIdParamSchema = z.object({
   payslipId: z
@@ -27,9 +27,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:read:any");
+    const organizationId = requireOrganization(authContext);
 
     const { payslipId } = await validateParams(params, payslipIdParamSchema);
-    const item = await payrollService.getPayslip(payslipId);
+    const item = await payrollService.getPayslip(organizationId, payslipId);
 
     return successResponse(item, undefined, `Payslip ${payslipId} fetched successfully`);
   } catch (error) {
@@ -41,10 +42,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { payslipId } = await validateParams(params, payslipIdParamSchema);
     const data = await validateBody(request, updatePayslipSchema);
-    const updated = await payrollService.updatePayslip(payslipId, data);
+    const updated = await payrollService.updatePayslip(organizationId, payslipId, data);
 
     return successResponse(updated, undefined, `Payslip ${payslipId} updated successfully`);
   } catch (error) {
@@ -56,9 +58,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { payslipId } = await validateParams(params, payslipIdParamSchema);
-    const deleted = await payrollService.deletePayslip(payslipId);
+    const deleted = await payrollService.deletePayslip(organizationId, payslipId);
 
     return successResponse(deleted, undefined, `Payslip ${payslipId} deleted successfully`);
   } catch (error) {

@@ -9,17 +9,18 @@ import {
   buildPaginationMeta,
   validateBody,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import { getAuthContext, requireOrganization, requirePermission } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:read:any");
+    const organizationId = requireOrganization(authContext);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, offset, search } = parsePagination(searchParams, 50);
 
-    const { items, total } = await payrollService.listPayslips(limit, offset, search);
+    const { items, total } = await payrollService.listPayslips(organizationId, limit, offset, search);
     const meta = buildPaginationMeta(page, limit, total, { search });
 
     return paginatedResponse(items, meta, "Payslips fetched successfully");
@@ -32,9 +33,10 @@ export async function POST(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const data = await validateBody(request, createPayslipSchema);
-    const created = await payrollService.createPayslip(data);
+    const created = await payrollService.createPayslip(organizationId, data);
 
     return createdResponse(created, "Payslip generated successfully");
   } catch (error) {

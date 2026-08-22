@@ -1,12 +1,13 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
+
+import { decideLeaveRequestSchema } from "@/features/time-off/time-off.schemas";
 import { timeOffService } from "@/features/time-off/time-off.service";
-import { rejectLeaveRequestSchema } from "@/features/time-off/time-off.schemas";
 import {
   errorResponse,
-  successResponse,
-  validateParams,
   requestIdParamSchema,
+  successResponse,
   validateBody,
+  validateParams,
 } from "@/lib/api";
 import { getAuthContext } from "@/lib/auth/session";
 
@@ -18,14 +19,22 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     const { requestId } = await validateParams(params, requestIdParamSchema);
-    const { reason } = await validateBody(request, rejectLeaveRequestSchema);
-    const updated = await timeOffService.rejectRequest(
+    const { decision, comment } = await validateBody(
+      request,
+      decideLeaveRequestSchema,
+    );
+    const updated = await timeOffService.decideRequest(
       authContext,
       requestId,
-      reason,
+      decision,
+      comment,
     );
 
-    return successResponse(updated, undefined, `Leave request ${requestId} rejected`);
+    return successResponse(
+      updated,
+      undefined,
+      `Leave request ${requestId} ${decision} successfully`,
+    );
   } catch (error) {
     return errorResponse(error);
   }

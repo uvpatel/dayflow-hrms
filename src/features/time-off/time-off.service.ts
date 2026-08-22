@@ -6,7 +6,6 @@ import {
   BusinessRuleError,
 } from "@/lib/api/errors";
 import { logActivity } from "@/lib/audit/logger";
-import { sendNotification } from "@/lib/notifications/service";
 import { AuthContext } from "@/lib/auth/session";
 import { z } from "zod";
 import {
@@ -157,15 +156,16 @@ export class TimeOffService {
   }
 
   // Requests
-  async listRequests(limit = 20, offset = 0, employeeId?: number, status?: string) {
-    const [items, total] = await Promise.all([
-      timeOffRepository.findRequests(limit, offset, employeeId, status),
-      timeOffRepository.countRequests(employeeId, status),
-    ]);
-    return { items, total };
+  private requireActorEmployee(authContext: AuthContext) {
+    if (!authContext.employee?.id || !authContext.organizationId) {
+      throw new BusinessRuleError(
+        "A linked employee and organization are required for leave operations",
+      );
+    }
+    return authContext.employee;
   }
 
-  async getRequest(id: number) {
+  private async getRequest(id: number) {
     const item = await timeOffRepository.findRequestById(id);
     if (!item) {
       throw new NotFoundError(`Leave request with ID ${id} not found`, "LEAVE_REQUEST_NOT_FOUND");
@@ -173,157 +173,357 @@ export class TimeOffService {
     return item;
   }
 
+  private async getRequestSubject(employeeId: number) {
+    const subject = await employeeRepository.findEmployeeById(employeeId);
+    if (!subject) {
+      throw new NotFoundError(
+        `Employee with ID ${employeeId} not found`,
+        "EMPLOYEE_NOT_FOUND",
+      );
+    }
+    return subject;
+  }
+
+  private accessActor(authContext: AuthContext) {
+    const employee = this.requireActorEmployee(authContext);
+    return {
+      role: authContext.role,
+      employeeId: employee.id,
+      organizationId: authContext.organizationId,
+    };
+  }
+
+  async listRequestsForActor(
+    authContext: AuthContext,
+    limit = 20,
+    offset = 0,
+    requestedEmployeeId?: number,
+    status?: string,
+  ) {
+    const actor = this.accessActor(authContext);
+    let employeeIds: number[] | undefined;
+
+    if (actor.role === "admin" || actor.role === "hr") {
+      if (requestedEmployeeId) {
+        const subject = await this.getRequestSubject(requestedEmployeeId);
+        if (subject.organizationId !== actor.organizationId) {
+          throw new AuthorizationError("Employee is outside your organization");
+        }
+        employeeIds = [requestedEmployeeId];
+      }
+    } else if (actor.role === "manager") {
+      const reports = await employeeRepository.findDirectReports(
+        actor.employeeId,
+        actor.organizationId,
+      );
+      const allowedIds = [actor.employeeId, ...reports.map((report) => report.id)];
+      if (requestedEmployeeId && !allowedIds.includes(requestedEmployeeId)) {
+        throw new AuthorizationError("Managers can only view their direct reports");
+      }
+      employeeIds = requestedEmployeeId ? [requestedEmployeeId] : allowedIds;
+    } else {
+      employeeIds = [actor.employeeId];
+    }
+
+    const scope = {
+      organizationId: actor.organizationId,
+      employeeIds,
+      status,
+    };
+    const [items, total] = await Promise.all([
+      timeOffRepository.findRequests(limit, offset, scope),
+      timeOffRepository.countRequests(scope),
+    ]);
+    return { items, total };
+  }
+
+  async getRequestForActor(authContext: AuthContext, id: number) {
+    const actor = this.accessActor(authContext);
+    const request = await this.getRequest(id);
+    const subject = await this.getRequestSubject(request.employeeId);
+    if (
+      request.organizationId !== actor.organizationId ||
+      !canReadLeaveRequest(actor, subject)
+    ) {
+      throw new AuthorizationError(
+        "You can only view your own or an assigned direct report's leave request",
+      );
+    }
+    return request;
+  }
+
   async submitRequest(authContext: AuthContext, data: z.infer<typeof createLeaveRequestSchema>) {
-    const employeeId = data.employeeId || authContext.employee?.id;
-    if (!employeeId) {
-      throw new BusinessRuleError("Valid employee profile is required to submit a leave request");
-    }
-
-    if (data.endDate < data.startDate) {
-      throw new BusinessRuleError("End date cannot be earlier than start date");
-    }
-
-    // Check for overlapping requests
-    const overlapping = await timeOffRepository.findOverlappingRequests(
-      employeeId,
-      data.startDate,
-      data.endDate
-    );
-    if (overlapping.length > 0) {
-      throw new ConflictError(
-        "You already have a pending or approved leave request overlapping these dates.",
-        "LEAVE_REQUEST_OVERLAP"
+    const actor = this.accessActor(authContext);
+    const employeeId =
+      (actor.role === "admin" || actor.role === "hr") && data.employeeId
+        ? data.employeeId
+        : actor.employeeId;
+    const subject = await this.getRequestSubject(employeeId);
+    if (
+      subject.organizationId !== actor.organizationId ||
+      subject.employmentStatus !== "active"
+    ) {
+      throw new AuthorizationError(
+        "Leave can only be submitted for an active employee in your organization",
       );
     }
 
-    // Calculate requested duration in days
-    const requestedDays = calculateRequestedDays(data.startDate, data.endDate, data.unit);
-
-    // Check allocation balance if allocation exists
-    const allocation = await timeOffRepository.findAllocationByEmployeeAndType(
-      employeeId,
-      data.leaveType
-    );
-    if (allocation) {
-      const remainingDays = Number(allocation.allocatedDays) - Number(allocation.usedDays);
-      if (remainingDays < requestedDays) {
-        throw new BusinessRuleError(
-          `Insufficient leave balance. You have ${remainingDays} days remaining for ${data.leaveType}, but requested ${requestedDays} days.`,
-          "INSUFFICIENT_LEAVE_BALANCE"
-        );
-      }
+    let requestedDays: number;
+    try {
+      requestedDays = calculateRequestedDays(data.startDate, data.endDate, data.unit);
+    } catch (error) {
+      throw new BusinessRuleError(
+        error instanceof Error ? error.message : "Invalid leave dates",
+      );
     }
 
-    const created = await timeOffRepository.createRequest({
+    const leaveType = await timeOffRepository.findLeaveTypeByName(
+      data.leaveType,
+      actor.organizationId,
+    );
+    if (!leaveType || !leaveType.active) {
+      throw new BusinessRuleError("The selected leave type is not available");
+    }
+
+    const created = await timeOffRepository.createRequestAtomically({
       employeeId,
+      organizationId: actor.organizationId,
       leaveType: data.leaveType,
       startDate: data.startDate,
       endDate: data.endDate,
       days: requestedDays.toFixed(2),
       unit: data.unit,
-      reason: data.reason ?? null,
-      status: "pending",
+      reason: data.reason?.trim() || null,
     });
+    if (created) return created;
 
-    // Create corresponding approval request for manager
-    await timeOffRepository.createApprovalRequest(employeeId, 1, "pending");
-
-    await logActivity({
-      action: "LEAVE_REQUESTED",
-      description: `Employee #${employeeId} requested ${requestedDays} days of ${data.leaveType}`,
-    });
-
-    return created;
-  }
-
-  async approveRequest(id: number) {
-    const request = await this.getRequest(id);
-
-    if (request.status !== "pending") {
-      throw new ConflictError(
-        `Cannot approve leave request with status '${request.status}'`,
-        "LEAVE_ALREADY_RESOLVED"
-      );
-    }
-
-    const updated = await timeOffRepository.updateRequest(id, {
-      status: "approved",
-    });
-
-    // Deduct allocation usedDays if allocation exists
-    const allocation = await timeOffRepository.findAllocationByEmployeeAndType(
-      request.employeeId,
-      request.leaveType
+    const overlapping = await timeOffRepository.findOverlappingRequests(
+      employeeId,
+      data.startDate,
+      data.endDate,
     );
-    if (allocation) {
-      const requestedDays = Number(request.days);
-      await timeOffRepository.updateAllocation(allocation.id, {
-        usedDays: (Number(allocation.usedDays) + requestedDays).toFixed(2),
-      });
-    }
-
-    await sendNotification({
-      userId: request.employeeId,
-      message: `Your ${request.leaveType} leave request from ${new Date(request.startDate).toLocaleDateString()} to ${new Date(request.endDate).toLocaleDateString()} has been approved.`,
-    });
-
-    await logActivity({
-      action: "LEAVE_APPROVED",
-      description: `Leave request #${id} for employee #${request.employeeId} approved`,
-    });
-
-    return updated!;
-  }
-
-  async rejectRequest(id: number, reason?: string) {
-    const request = await this.getRequest(id);
-
-    if (request.status !== "pending") {
+    if (overlapping.length > 0) {
       throw new ConflictError(
-        `Cannot reject leave request with status '${request.status}'`,
-        "LEAVE_ALREADY_RESOLVED"
+        "A pending or approved leave request already overlaps these dates.",
+        "LEAVE_REQUEST_OVERLAP",
       );
     }
 
-    const updated = await timeOffRepository.updateRequest(id, {
-      status: "rejected",
-    });
+    if (leaveType.requiresBalance) {
+      const allocation = await timeOffRepository.findAllocationByEmployeeAndType(
+        employeeId,
+        data.leaveType,
+      );
+      const remaining = allocation
+        ? Number(allocation.allocatedDays) - Number(allocation.usedDays)
+        : 0;
+      throw new BusinessRuleError(
+        `Insufficient leave balance. ${remaining} days remain for ${data.leaveType}.`,
+        "INSUFFICIENT_LEAVE_BALANCE",
+      );
+    }
 
-    await sendNotification({
-      userId: request.employeeId,
-      message: `Your ${request.leaveType} leave request has been rejected.${reason ? ` Reason: ${reason}` : ""}`,
-    });
-
-    await logActivity({
-      action: "LEAVE_REJECTED",
-      description: `Leave request #${id} rejected`,
-    });
-
-    return updated!;
+    throw new ConflictError("Leave request could not be submitted");
   }
 
-  async updateRequest(id: number, data: z.infer<typeof updateLeaveRequestSchema>) {
-    await this.getRequest(id);
-    const updated = await timeOffRepository.updateRequest(id, data);
+  async decideRequest(
+    authContext: AuthContext,
+    id: number,
+    decision: "approved" | "rejected",
+    comment?: string,
+  ) {
+    const actor = this.accessActor(authContext);
+    const request = await this.getRequest(id);
+    const subject = await this.getRequestSubject(request.employeeId);
+    if (
+      request.organizationId !== actor.organizationId ||
+      !canDecideLeaveRequest(actor, subject)
+    ) {
+      throw new AuthorizationError(
+        "Only HR, administrators, or the assigned reporting manager can decide this request",
+      );
+    }
+    if (request.status !== "pending") {
+      throw new ConflictError(
+        `Cannot decide a leave request with status '${request.status}'`,
+        "LEAVE_ALREADY_RESOLVED",
+      );
+    }
 
-    await logActivity({
-      action: "LEAVE_REQUEST_UPDATED",
-      description: `Updated leave request #${id}`,
+    let normalizedComment = comment?.trim() || null;
+    if (decision === "rejected") {
+      try {
+        normalizedComment = assertRejectComment(comment);
+      } catch (error) {
+        throw new BusinessRuleError(
+          error instanceof Error ? error.message : "A rejection comment is required",
+        );
+      }
+    }
+
+    const decided = await timeOffRepository.decideRequestAtomically({
+      requestId: id,
+      actorEmployeeId: actor.employeeId,
+      actorRole: actor.role,
+      organizationId: actor.organizationId!,
+      decision,
+      comment: normalizedComment,
     });
+    if (decided) return decided;
 
-    return updated!;
+    const latest = await this.getRequest(id);
+    if (latest.status !== "pending") {
+      throw new ConflictError(
+        `Leave request is already '${latest.status}'`,
+        "LEAVE_ALREADY_RESOLVED",
+      );
+    }
+
+    const latestSubject = await this.getRequestSubject(latest.employeeId);
+    if (!canDecideLeaveRequest(actor, latestSubject)) {
+      throw new AuthorizationError("You are no longer assigned to decide this request");
+    }
+    throw new BusinessRuleError(
+      "Insufficient leave balance to approve this request",
+      "INSUFFICIENT_LEAVE_BALANCE",
+    );
   }
 
-  async deleteRequest(id: number) {
-    await this.getRequest(id);
-    const deleted = await timeOffRepository.deleteRequest(id);
+  async approveRequest(authContext: AuthContext, id: number, comment?: string) {
+    return this.decideRequest(authContext, id, "approved", comment);
+  }
 
-    await logActivity({
-      action: "LEAVE_REQUEST_DELETED",
-      description: `Deleted leave request #${id}`,
+  async rejectRequest(authContext: AuthContext, id: number, reason?: string) {
+    return this.decideRequest(authContext, id, "rejected", reason);
+  }
+
+  async cancelRequest(authContext: AuthContext, id: number) {
+    const actor = this.accessActor(authContext);
+    const request = await this.getRequest(id);
+    if (
+      request.organizationId !== actor.organizationId ||
+      request.employeeId !== actor.employeeId
+    ) {
+      throw new AuthorizationError("Only the request owner can cancel leave");
+    }
+    try {
+      assertPendingCancellation(request.status);
+    } catch (error) {
+      throw new ConflictError(
+        error instanceof Error ? error.message : "Leave request cannot be cancelled",
+        "LEAVE_ALREADY_RESOLVED",
+      );
+    }
+
+    const cancelled = await timeOffRepository.cancelRequestAtomically(
+      id,
+      actor.employeeId,
+      actor.organizationId,
+    );
+    if (!cancelled) {
+      throw new ConflictError(
+        "Leave request was already decided or cancelled",
+        "LEAVE_ALREADY_RESOLVED",
+      );
+    }
+    return cancelled;
+  }
+
+  async updateRequestForActor(
+    authContext: AuthContext,
+    id: number,
+    data: z.infer<typeof updateLeaveRequestSchema>,
+  ) {
+    const actor = this.accessActor(authContext);
+    const request = await this.getRequest(id);
+    if (
+      request.organizationId !== actor.organizationId ||
+      request.employeeId !== actor.employeeId
+    ) {
+      throw new AuthorizationError("Only the request owner can edit leave");
+    }
+    if (request.status !== "pending") {
+      throw new ConflictError(
+        "Only pending leave requests can be edited",
+        "LEAVE_ALREADY_RESOLVED",
+      );
+    }
+
+    const leaveTypeName = data.leaveType ?? request.leaveType;
+    const startDate = data.startDate ?? request.startDate;
+    const endDate = data.endDate ?? request.endDate;
+    const unit = data.unit ?? (request.unit as "full_day" | "half_day");
+    let days: number;
+    try {
+      days = calculateRequestedDays(startDate, endDate, unit);
+    } catch (error) {
+      throw new BusinessRuleError(
+        error instanceof Error ? error.message : "Invalid leave dates",
+      );
+    }
+
+    const leaveType = await timeOffRepository.findLeaveTypeByName(
+      leaveTypeName,
+      actor.organizationId,
+    );
+    if (!leaveType || !leaveType.active) {
+      throw new BusinessRuleError("The selected leave type is not available");
+    }
+    const requiresBalance =
+      leaveType.requiresBalance && !leaveTypeName.toLowerCase().includes("unpaid");
+    if (requiresBalance) {
+      const allocation = await timeOffRepository.findAllocationByEmployeeAndType(
+        actor.employeeId,
+        leaveTypeName,
+      );
+      const remaining = allocation
+        ? Number(allocation.allocatedDays) - Number(allocation.usedDays)
+        : 0;
+      if (remaining < days) {
+        throw new BusinessRuleError(
+          `Insufficient leave balance. ${remaining} days remain for ${leaveTypeName}.`,
+          "INSUFFICIENT_LEAVE_BALANCE",
+        );
+      }
+    }
+
+    const updated = await timeOffRepository.updateRequestAtomically({
+      requestId: id,
+      employeeId: actor.employeeId,
+      organizationId: actor.organizationId!,
+      leaveType: leaveTypeName,
+      startDate,
+      endDate,
+      unit,
+      days: days.toFixed(2),
+      reason:
+        data.reason !== undefined ? data.reason.trim() || null : request.reason,
     });
+    if (updated) return updated;
 
-    return deleted!;
+    const latest = await this.getRequest(id);
+    if (latest.status !== "pending") {
+      throw new ConflictError(
+        "Leave request was decided or cancelled while it was being edited",
+        "LEAVE_ALREADY_RESOLVED",
+      );
+    }
+    const overlapping = await timeOffRepository.findOverlappingRequests(
+      actor.employeeId,
+      startDate,
+      endDate,
+      id,
+    );
+    if (overlapping.length > 0) {
+      throw new ConflictError(
+        "A pending or approved leave request already overlaps these dates.",
+        "LEAVE_REQUEST_OVERLAP",
+      );
+    }
+    throw new BusinessRuleError(
+      "Insufficient leave balance for the requested update",
+      "INSUFFICIENT_LEAVE_BALANCE",
+    );
   }
 }
 

@@ -31,7 +31,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(signUpUrl);
   }
 
-  return NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-dayflow-pathname", pathname);
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 }
 
 export const config = {

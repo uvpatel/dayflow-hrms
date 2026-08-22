@@ -4,16 +4,23 @@ import { getAuthContext } from "@/lib/auth-context";
 import { AppSidebar } from "@/components/sidebar/sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SiteHeader } from "@/components/main/site-header";
+import { canAccessPage } from "@/lib/permissions";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const context = await getAuthContext(await headers());
+  const requestHeaders = await headers();
+  const context = await getAuthContext(requestHeaders);
 
   if (!context) {
     redirect("/sign-in");
+  }
+
+  const pathname = requestHeaders.get("x-dayflow-pathname") ?? "/dashboard";
+  if (!canAccessPage(context.role, pathname)) {
+    redirect("/dashboard");
   }
 
   return (

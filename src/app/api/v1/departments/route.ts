@@ -1,54 +1,54 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requirePermission } from "@/lib/auth-context";
-import { db } from "@/db";
-import { departments } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { NextRequest } from "next/server";
+
+import { createDepartmentSchema } from "@/features/organization/organization.schemas";
+import { organizationService } from "@/features/organization/organization.service";
+import {
+  buildPaginationMeta,
+  createdResponse,
+  errorResponse,
+  paginatedResponse,
+  parsePagination,
+  validateBody,
+} from "@/lib/api";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const { error, ctx } = await requireAuth(request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const whereClause = ctx.organizationId ? eq(departments.organizationId, ctx.organizationId) : undefined;
-    const data = await db.select().from(departments).where(whereClause);
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "department:read");
+    const organizationId = requireOrganization(authContext);
 
-    return NextResponse.json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    console.error("Error fetching departments:", err);
-    return NextResponse.json({ success: false, error: "Failed to fetch departments" }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const { page, limit, offset, search } = parsePagination(searchParams, 50);
+    const items = await organizationService.listDepartments(
+      organizationId,
+      limit,
+      offset,
+      search,
+    );
+    const meta = buildPaginationMeta(page, limit, items.length, { search });
+
+    return paginatedResponse(items, meta, "Departments fetched successfully");
+  } catch (error) {
+    return errorResponse(error);
   }
 }
 
 export async function POST(request: NextRequest) {
-  const { error, ctx } = await requirePermission("organization:manage", request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const body = await request.json();
-    if (!body.name || !body.name.trim()) {
-      return NextResponse.json({ success: false, error: "Department name is required" }, { status: 400 });
-    }
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "department:manage");
+    const organizationId = requireOrganization(authContext);
 
-    const [created] = await db
-      .insert(departments)
-      .values({
-        name: body.name.trim(),
-        description: body.description?.trim() || null,
-        organizationId: ctx.organizationId,
-        managerId: body.managerId ? Number(body.managerId) : null,
-      })
-      .returning();
+    const data = await validateBody(request, createDepartmentSchema);
+    const created = await organizationService.createDepartment(organizationId, data);
 
-    return NextResponse.json({
-      success: true,
-      message: "Department created successfully",
-      data: created,
-    }, { status: 201 });
-  } catch (err) {
-    console.error("Error creating department:", err);
-    return NextResponse.json({ success: false, error: "Failed to create department" }, { status: 500 });
+    return createdResponse(created, "Department created successfully");
+  } catch (error) {
+    return errorResponse(error);
   }
 }

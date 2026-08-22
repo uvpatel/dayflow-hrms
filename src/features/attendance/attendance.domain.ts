@@ -14,7 +14,7 @@ export interface AttendanceCalculation {
   workMinutes: number;
   overtimeMinutes: number;
   workHours: string;
-  status: "present" | "half_day";
+  status: "present" | "half_day" | "absent";
 }
 
 function zonedParts(at: Date, timezone: string) {
@@ -85,7 +85,12 @@ export function calculateAttendance(
   );
   const workMinutes = Math.max(0, grossMinutes - breakMinutes);
   const overtimeMinutes = Math.max(0, workMinutes - schedule.fullDayMinutes);
-  const status = workMinutes >= schedule.fullDayMinutes ? "present" : "half_day";
+  const status =
+    workMinutes >= schedule.fullDayMinutes
+      ? "present"
+      : workMinutes >= schedule.halfDayMinutes
+        ? "half_day"
+        : "absent";
 
   return {
     grossMinutes,

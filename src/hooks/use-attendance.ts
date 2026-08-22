@@ -21,8 +21,16 @@ export interface AttendanceFilterParams {
 export interface AttendanceCorrection {
   id: number;
   userId: string;
+  employeeId?: number | null;
+  attendanceId?: number | null;
   correctionDate: string;
   reason?: string | null;
+  requestedCheckInTime?: string | null;
+  requestedCheckOutTime?: string | null;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  reviewedBy?: number | null;
+  reviewComment?: string | null;
+  reviewedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -140,7 +148,13 @@ export function useAttendanceCorrections(params?: { limit?: number; offset?: num
 export function useRequestCorrection() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { correctionDate: string; reason: string; userId?: string }) => {
+    mutationFn: async (payload: {
+      attendanceId?: number;
+      correctionDate: string;
+      reason: string;
+      requestedCheckInTime?: string;
+      requestedCheckOutTime?: string;
+    }) => {
       const res = await apiClient<AttendanceCorrection>("/api/v1/attendance/corrections", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -149,6 +163,37 @@ export function useRequestCorrection() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: attendanceKeys.correctionLists() });
+    },
+  });
+}
+
+export function useDecideAttendanceCorrection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      decision,
+      comment,
+    }: {
+      id: number;
+      decision: "approved" | "rejected";
+      comment?: string;
+    }) => {
+      const response = await apiClient<AttendanceCorrection>(
+        `/api/v1/attendance/corrections/${id}/decision`,
+        {
+          method: "POST",
+          body: JSON.stringify({ decision, comment }),
+        },
+      );
+      return response.data;
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: reportKeys.all }),
+      ]);
     },
   });
 }

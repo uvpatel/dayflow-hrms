@@ -1,105 +1,143 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth-context";
+import type { NextRequest } from "next/server";
+import { and, eq, gte, inArray } from "drizzle-orm";
+
 import { db } from "@/db";
-import { employees, attendances, leaveRequests, approvalRequests, activityLogs, departments } from "@/db/schema";
-import { count, eq, and, sql } from "drizzle-orm";
+import {
+  attendanceCorrections,
+  attendances,
+  departments,
+  employees,
+  leaveRequests,
+} from "@/db/schema";
+import { getWorkDate } from "@/features/attendance/attendance.domain";
+import { attendanceRepository } from "@/features/attendance/attendance.repository";
+import { employeeRepository } from "@/features/employees/employee.repository";
+import { AuthorizationError, NotFoundError } from "@/lib/api/errors";
+import { errorResponse, successResponse } from "@/lib/api";
+import { getAuthContext } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const { error, ctx } = await requireAuth(request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const orgId = ctx.organizationId;
-    const orgFilter = orgId ? eq(employees.organizationId, orgId) : undefined;
+    const authContext = await getAuthContext(request);
+    if (authContext.role === "employee") {
+      throw new AuthorizationError("Operational metrics are available to managers, HR, and administrators");
+    }
+    if (!authContext.employee || authContext.organizationId == null) {
+      throw new NotFoundError("An organization-linked employee profile is required", "EMPLOYEE_NOT_FOUND");
+    }
 
-    // Total employees
-    const [empCount] = await db
-      .select({ count: count() })
+    const organizationId = authContext.organizationId;
+    const reports = authContext.role === "manager"
+      ? await employeeRepository.findDirectReports(
+          authContext.employee.id,
+          organizationId,
+        )
+      : null;
+    const scopedEmployeeIds = reports?.map((employee) => employee.id);
+
+    const allEmployees = await db
+      .select()
       .from(employees)
-      .where(orgFilter ? and(eq(employees.employmentStatus, "active"), orgFilter) : eq(employees.employmentStatus, "active"));
+      .where(
+        and(
+          eq(employees.organizationId, organizationId),
+          eq(employees.employmentStatus, "active"),
+          ...(scopedEmployeeIds ? [
+            scopedEmployeeIds.length > 0
+              ? inArray(employees.id, scopedEmployeeIds)
+              : eq(employees.id, -1),
+          ] : []),
+        ),
+      );
+    const employeeIds = allEmployees.map((employee) => employee.id);
+    const employeeScope = employeeIds.length > 0
+      ? inArray(attendances.employeeId, employeeIds)
+      : eq(attendances.employeeId, -1);
+    const leaveEmployeeScope = employeeIds.length > 0
+      ? inArray(leaveRequests.employeeId, employeeIds)
+      : eq(leaveRequests.employeeId, -1);
+    const correctionEmployeeScope = employeeIds.length > 0
+      ? inArray(attendanceCorrections.employeeId, employeeIds)
+      : eq(attendanceCorrections.employeeId, -1);
 
-    // Today's attendance
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const timezone = await attendanceRepository.findOrganizationTimezone(organizationId);
+    const today = getWorkDate(new Date(), timezone);
+    const trendStart = new Date();
+    trendStart.setUTCDate(trendStart.getUTCDate() - 6);
+    trendStart.setUTCHours(0, 0, 0, 0);
 
-    const [presentCount] = await db
-      .select({ count: count() })
-      .from(attendances)
-      .where(sql`${attendances.date} >= ${today}`);
+    const [todayAttendance, trendAttendance, pendingLeaves, approvedLeave, pendingCorrections, departmentList] = await Promise.all([
+      db.select().from(attendances).where(and(
+        eq(attendances.organizationId, organizationId),
+        eq(attendances.workDate, today),
+        employeeScope,
+      )),
+      db.select().from(attendances).where(and(
+        eq(attendances.organizationId, organizationId),
+        gte(attendances.date, trendStart),
+        employeeScope,
+      )),
+      db.select({ id: leaveRequests.id }).from(leaveRequests).where(and(
+        eq(leaveRequests.organizationId, organizationId),
+        eq(leaveRequests.status, "pending"),
+        leaveEmployeeScope,
+      )),
+      db.select().from(leaveRequests).where(and(
+        eq(leaveRequests.organizationId, organizationId),
+        eq(leaveRequests.status, "approved"),
+        leaveEmployeeScope,
+      )),
+      db.select({ id: attendanceCorrections.id }).from(attendanceCorrections).where(and(
+        eq(attendanceCorrections.organizationId, organizationId),
+        eq(attendanceCorrections.status, "pending"),
+        correctionEmployeeScope,
+      )),
+      db.select().from(departments).where(eq(departments.organizationId, organizationId)),
+    ]);
 
-    // Pending approvals
-    const [pendingCount] = await db
-      .select({ count: count() })
-      .from(approvalRequests)
-      .where(eq(approvalRequests.status, "pending"));
-
-    // Pending leave
-    const [pendingLeaves] = await db
-      .select({ count: count() })
-      .from(leaveRequests)
-      .where(eq(leaveRequests.status, "pending"));
-
-    // Department distribution
-    const deptList = await db
-      .select({
-        id: departments.id,
-        name: departments.name,
-      })
-      .from(departments);
-
-    const departmentDistribution = await Promise.all(
-      deptList.map(async (d) => {
-        const [cnt] = await db
-          .select({ count: count() })
-          .from(employees)
-          .where(eq(employees.departmentId, d.id));
-        return {
-          department: d.name,
-          count: cnt?.count || 0,
-        };
-      })
+    const todayDate = new Date(`${today}T00:00:00.000Z`);
+    const onLeaveIds = new Set(
+      approvedLeave
+        .filter((request) => request.startDate <= todayDate && request.endDate >= todayDate)
+        .map((request) => request.employeeId),
+    );
+    const presentIds = new Set(
+      todayAttendance
+        .filter((record) => record.status === "present" || record.status === "half_day")
+        .map((record) => record.employeeId)
+        .filter((id): id is number => id != null),
     );
 
-    // Recent activity
-    const recentActivities = await db
-      .select()
-      .from(activityLogs)
-      .orderBy(sql`${activityLogs.createdAt} DESC`)
-      .limit(6);
+    const attendanceTrend = new Map<string, { date: string; present: number; absent: number; leave: number }>();
+    for (const record of trendAttendance) {
+      const date = record.workDate ?? getWorkDate(record.date, timezone);
+      const current = attendanceTrend.get(date) ?? { date, present: 0, absent: 0, leave: 0 };
+      if (record.status === "present" || record.status === "half_day") current.present += 1;
+      if (record.status === "absent") current.absent += 1;
+      if (record.status === "leave") current.leave += 1;
+      attendanceTrend.set(date, current);
+    }
 
-    const totalEmps = empCount?.count || 0;
-    const present = presentCount?.count || 0;
-    const onLeave = pendingLeaves?.count || 0;
-    const absent = Math.max(0, totalEmps - present - onLeave);
+    const departmentDistribution = departmentList
+      .map((department) => ({
+        department: department.name,
+        count: allEmployees.filter((employee) => employee.departmentId === department.id).length,
+      }))
+      .filter((entry) => entry.count > 0);
 
-    // Weekly attendance trend simulation/aggregate
-    const attendanceTrend = [
-      { date: "Mon", present: Math.min(totalEmps, Math.max(1, Math.round(totalEmps * 0.9))), absent: 1, leave: 1 },
-      { date: "Tue", present: Math.min(totalEmps, Math.max(1, Math.round(totalEmps * 0.94))), absent: 0, leave: 1 },
-      { date: "Wed", present: Math.min(totalEmps, Math.max(1, Math.round(totalEmps * 0.92))), absent: 1, leave: 0 },
-      { date: "Thu", present: Math.min(totalEmps, Math.max(1, Math.round(totalEmps * 0.88))), absent: 2, leave: 1 },
-      { date: "Fri", present: Math.min(totalEmps, Math.max(1, Math.round(totalEmps * 0.85))), absent: 2, leave: 2 },
-    ];
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        totalEmployees: totalEmps,
-        presentToday: present,
-        absentToday: absent,
-        onLeaveToday: onLeave,
-        pendingApprovals: (pendingCount?.count || 0) + (pendingLeaves?.count || 0),
-        attendanceTrend,
-        departmentDistribution: departmentDistribution.length > 0 ? departmentDistribution : [
-          { department: "Engineering", count: 8 },
-          { department: "Product & Design", count: 4 },
-          { department: "Operations & HR", count: 3 },
-        ],
-        recentActivities,
-      },
+    return successResponse({
+      totalEmployees: allEmployees.length,
+      presentToday: presentIds.size,
+      absentToday: Math.max(0, allEmployees.length - presentIds.size - onLeaveIds.size),
+      onLeaveToday: onLeaveIds.size,
+      pendingApprovals: pendingLeaves.length + pendingCorrections.length,
+      attendanceTrend: [...attendanceTrend.values()].sort((left, right) => left.date.localeCompare(right.date)),
+      departmentDistribution,
+      // Activity logs do not yet carry an organization key, so returning them
+      // here would cross tenant boundaries.
+      recentActivities: [],
     });
-  } catch (err) {
-    console.error("Error fetching dashboard reports:", err);
-    return NextResponse.json({ success: false, error: "Failed to fetch dashboard metrics" }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error);
   }
 }

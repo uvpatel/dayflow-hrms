@@ -194,7 +194,7 @@ export default function DashboardPage() {
   const meQuery = useMe();
   const employeeId = meQuery.data?.employee?.id;
   const role = normalizeRole(
-    meQuery.data?.user.role ?? meQuery.data?.employee?.role
+    meQuery.data?.employee?.role ?? meQuery.data?.user.role
   );
   const canReview = role === "manager" || role === "hr" || role === "admin";
 

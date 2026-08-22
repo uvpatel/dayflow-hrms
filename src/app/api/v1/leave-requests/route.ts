@@ -8,9 +8,15 @@ import {
   parsePagination,
   buildPaginationMeta,
   validateBody,
+  validateQuery,
 } from "@/lib/api";
 import { getAuthContext, requirePermission } from "@/lib/auth/session";
-import { employeeService } from "@/features/employees/employee.service";
+import { z } from "zod";
+
+const leaveRequestQuerySchema = z.object({
+  employeeId: z.coerce.number().int().positive().optional(),
+  status: z.enum(["pending", "approved", "rejected", "cancelled"]).optional(),
+}).passthrough();
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,24 +25,14 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination(searchParams, 20, 100);
-    const requestedEmployeeId = searchParams.get("employeeId") ? Number(searchParams.get("employeeId")) : undefined;
-    const status = searchParams.get("status") || undefined;
-
-    // Regular employees only see their own requests unless they have leave:read:any
-    let employeeId = requestedEmployeeId;
-    const canViewAll = authContext.role === "admin" || authContext.role === "hr";
-    if (!canViewAll && authContext.role !== "manager") {
-      employeeId = authContext.employee?.id;
-    } else if (authContext.role === "manager") {
-      if (requestedEmployeeId) {
-        await employeeService.assertCanReadEmployee(authContext, requestedEmployeeId);
-        employeeId = requestedEmployeeId;
-      } else {
-        employeeId = authContext.employee?.id;
-      }
-    }
-
-    const { items, total } = await timeOffService.listRequests(limit, offset, employeeId, status);
+    const { employeeId, status } = validateQuery(searchParams, leaveRequestQuerySchema);
+    const { items, total } = await timeOffService.listRequestsForActor(
+      authContext,
+      limit,
+      offset,
+      employeeId,
+      status,
+    );
     const meta = buildPaginationMeta(page, limit, total, { employeeId, status });
 
     return paginatedResponse(items, meta, "Leave requests fetched successfully");
@@ -51,13 +47,7 @@ export async function POST(request: NextRequest) {
     requirePermission(authContext, "leave:create");
 
     const data = await validateBody(request, createLeaveRequestSchema);
-    const created = await timeOffService.submitRequest(authContext, {
-      ...data,
-      employeeId:
-        authContext.role === "admin" || authContext.role === "hr"
-          ? data.employeeId
-          : authContext.employee?.id,
-    });
+    const created = await timeOffService.submitRequest(authContext, data);
 
     return createdResponse(created, "Leave request submitted successfully");
   } catch (error) {
