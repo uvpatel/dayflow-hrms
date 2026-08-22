@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { SiteHeader } from "@/components/main/site-header";
 import { authClient } from "@/lib/auth-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,7 +64,6 @@ export default function UserProfilePage() {
   if (isPending) {
     return (
       <div className="flex flex-1 flex-col min-h-screen bg-background">
-        <SiteHeader title="User Profile" />
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="size-8 animate-spin text-primary" />
         </div>
@@ -75,7 +73,6 @@ export default function UserProfilePage() {
 
   return (
     <div className="flex flex-1 flex-col min-h-screen bg-background">
-      <SiteHeader title="User Profile" />
 
       <div className="flex flex-1 flex-col gap-6 p-6 md:p-10 max-w-4xl mx-auto w-full">
         <div>

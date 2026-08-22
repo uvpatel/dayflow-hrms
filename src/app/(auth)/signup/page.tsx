@@ -9,7 +9,7 @@ export default async function SignupPage() {
   });
 
   if (session) {
-    redirect("/dashboard");
+    redirect("/auth/redirect");
   }
 
   return (
@@ -20,4 +20,3 @@ export default async function SignupPage() {
     </div>
   );
 }
-

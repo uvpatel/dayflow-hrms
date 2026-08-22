@@ -10,8 +10,12 @@ export type Permission =
   | "attendance:manage"
   | "leave:self"
   | "leave:create"
+  | "leave:read:self"
   | "leave:read:team"
   | "leave:read:any"
+  | "leave:update"
+  | "leave:delete"
+  | "leave:approve"
   | "leave:manage"
   | "payroll:read:self"
   | "payroll:read:any"
@@ -24,7 +28,23 @@ export type Permission =
   | "employee:delete"
   | "organization:read"
   | "organization:manage"
+  | "org:read"
+  | "org:manage"
+  | "department:read"
+  | "department:manage"
+  | "designation:read"
+  | "designation:manage"
+  | "location:read"
+  | "location:manage"
+  | "holiday:read"
+  | "holiday:manage"
+  | "schedule:read"
+  | "schedule:manage"
+  | "notification:read"
+  | "notification:manage"
+  | "audit:read"
   | "approval:read"
+  | "approval:action"
   | "approval:manage:team"
   | "approval:manage";
 
@@ -35,8 +55,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "attendance:self",
     "leave:self",
     "leave:create",
+    "leave:read:self",
     "payroll:read:self",
     "employee:read:self",
+    "notification:read",
   ],
   manager: [
     "self:read",
@@ -45,6 +67,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "attendance:read:team",
     "leave:self",
     "leave:create",
+    "leave:read:self",
     "leave:read:team",
     "payroll:read:self",
     "employee:read:self",
@@ -52,6 +75,13 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "approval:read",
     "approval:manage:team",
     "organization:read",
+    "org:read",
+    "department:read",
+    "designation:read",
+    "location:read",
+    "holiday:read",
+    "schedule:read",
+    "notification:read",
   ],
   hr: [
     "self:read",
@@ -61,7 +91,11 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "attendance:manage",
     "leave:self",
     "leave:create",
+    "leave:read:self",
     "leave:read:any",
+    "leave:approve",
+    "leave:update",
+    "leave:delete",
     "leave:manage",
     "payroll:read:self",
     "payroll:read:any",
@@ -71,8 +105,17 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:create",
     "employee:update",
     "organization:read",
+    "org:read",
+    "department:read",
+    "designation:read",
+    "location:read",
+    "holiday:read",
+    "schedule:read",
+    "notification:read",
+    "notification:manage",
     "approval:read",
     "approval:manage",
+    "approval:action",
   ],
   admin: [
     "admin:all",
@@ -84,8 +127,12 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "attendance:manage",
     "leave:self",
     "leave:create",
+    "leave:read:self",
     "leave:read:team",
     "leave:read:any",
+    "leave:update",
+    "leave:delete",
+    "leave:approve",
     "leave:manage",
     "payroll:read:self",
     "payroll:read:any",
@@ -98,9 +145,25 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:delete",
     "organization:read",
     "organization:manage",
+    "org:read",
+    "org:manage",
+    "department:read",
+    "department:manage",
+    "designation:read",
+    "designation:manage",
+    "location:read",
+    "location:manage",
+    "holiday:read",
+    "holiday:manage",
+    "schedule:read",
+    "schedule:manage",
+    "notification:read",
+    "notification:manage",
+    "audit:read",
     "approval:read",
     "approval:manage:team",
     "approval:manage",
+    "approval:action",
   ],
 } as const;
 

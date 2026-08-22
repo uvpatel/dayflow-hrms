@@ -19,7 +19,9 @@ export const auth = betterAuth({
   },
   plugins: [
     admin({
-      defaultRole: "user",
+      // Public sign-up never grants elevated access. HR and admin roles are
+      // assigned only by an authorized server-side role-management flow.
+      defaultRole: "employee",
     }),
   ],
   socialProviders: {

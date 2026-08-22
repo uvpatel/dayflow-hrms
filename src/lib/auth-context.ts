@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { employees, organizations } from "@/db/schema";
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Role, Permission, getRolePermissions, hasPermission } from "./permissions";
 import type { Employee } from "@/db/schema/employees";
 
@@ -98,10 +98,10 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
   const firstName = nameParts[0] || "User";
   const lastName = nameParts.slice(1).join(" ") || "Employee";
 
-  // Check if first user to determine role
-  const allEmployees = await db.select().from(employees).limit(2);
-  const isFirstUser = allEmployees.length === 0;
-  const userRole: Role = (user.role as Role) || (isFirstUser ? "admin" : "employee");
+  // Public registration is never allowed to bootstrap a privileged account.
+  // Development administrators are provisioned through the explicit seed flow;
+  // production role changes require an authorized server-side operation.
+  const userRole: Role = "employee";
 
   const [newEmp] = await db
     .insert(employees)

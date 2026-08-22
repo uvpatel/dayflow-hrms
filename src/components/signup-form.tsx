@@ -113,7 +113,7 @@ export function SignupForm({
           res.error.message || "Failed to create account. Please try again."
         );
       } else {
-        router.replace("/dashboard");
+        router.replace("/auth/redirect");
         router.refresh();
       }
     } catch (err: unknown) {
@@ -133,7 +133,7 @@ export function SignupForm({
     try {
       const res = await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/dashboard",
+        callbackURL: "/auth/redirect",
       });
 
       if (res?.error) {
@@ -167,6 +167,10 @@ export function SignupForm({
                   Enter your details below to create your account
                 </p>
               </div>
+
+              <FieldDescription className="rounded-md border border-muted bg-muted/40 p-3 text-center">
+                New accounts receive employee access. HR, manager, and admin access can only be assigned by an administrator.
+              </FieldDescription>
 
               {formError && (
                 <div
@@ -397,4 +401,3 @@ export function SignupForm({
     </div>
   );
 }
-

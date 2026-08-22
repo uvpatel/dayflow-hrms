@@ -19,7 +19,6 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 
-import { SiteHeader } from "@/components/main/site-header";
 import {
   Card,
   CardContent,
@@ -137,7 +136,6 @@ export default function BillingPage() {
 
   return (
     <div className="flex flex-1 flex-col min-h-screen bg-background">
-      <SiteHeader title="Settings & Billing" />
 
       <div className="flex flex-1 flex-col gap-8 p-4 md:p-6 lg:p-10 max-w-7xl mx-auto w-full">
         {/* Navigation Tabs Header */}

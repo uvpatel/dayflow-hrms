@@ -90,7 +90,7 @@ export function LoginForm({
           res.error.message || "Invalid email or password. Please try again."
         );
       } else {
-        router.replace("/dashboard");
+        router.replace("/auth/redirect");
         router.refresh();
       }
     } catch (err: unknown) {
@@ -110,7 +110,7 @@ export function LoginForm({
     try {
       const res = await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/dashboard",
+        callbackURL: "/auth/redirect",
       });
 
       if (res?.error) {
@@ -271,7 +271,7 @@ export function LoginForm({
               <FieldDescription className="text-center">
                 Don&apos;t have an account?{" "}
                 <Link
-                  href="/signup"
+                  href="/sign-up"
                   className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
                 >
                   Sign up
@@ -303,4 +303,3 @@ export function LoginForm({
     </div>
   );
 }
-

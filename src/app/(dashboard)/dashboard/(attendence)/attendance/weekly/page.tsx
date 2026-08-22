@@ -1,10 +1,5 @@
-import { SiteHeader } from "@/components/main/site-header";
+import AttendancePage from "../page";
 
-export default function WeeklyPage() {
-  return (
-    <div>
-      <SiteHeader />
-      <h1>Welcome to Weekly Page!</h1>
-    </div>
-  );
+export default function AttendanceWeeklyPage() {
+  return <AttendancePage />;
 }

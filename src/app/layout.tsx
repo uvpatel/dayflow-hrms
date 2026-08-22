@@ -4,7 +4,8 @@ import "./globals.css";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/providers/theme-provider";
-import { ModeToggle } from "@/components/toggler";
+import { QueryProvider } from "@/providers/query-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -22,36 +23,26 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const today = new Date();
-
   return (
     <html
       lang="en"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <TooltipProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <header className="flex justify-end items-center p-4 gap-4 h-16">
-              <span className="mx-2 text-xs text-muted-foreground hidden sm:inline-block">
-                {today.toLocaleDateString("en-US", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </span>
-              <ModeToggle />
-            </header>
-            {children}
-          </ThemeProvider>
-        </TooltipProvider>
+      <body className="min-h-full flex flex-col bg-background text-foreground" suppressHydrationWarning>
+        <QueryProvider>
+          <TooltipProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+              <Toaster position="top-right" richColors />
+            </ThemeProvider>
+          </TooltipProvider>
+        </QueryProvider>
       </body>
     </html>
   );

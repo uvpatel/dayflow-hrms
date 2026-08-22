@@ -18,7 +18,6 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 
-import { SiteHeader } from "@/components/main/site-header";
 import {
   Card,
   CardContent,
@@ -103,7 +102,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-1 flex-col min-h-screen bg-background">
-      <SiteHeader title="Settings & Organization" />
+  
 
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-10 max-w-6xl mx-auto w-full">
         {/* Page Header */}

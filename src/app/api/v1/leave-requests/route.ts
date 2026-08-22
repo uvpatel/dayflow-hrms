@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Regular employees only see their own requests unless they have leave:read:any
     let employeeId = requestedEmployeeId;
-    const canViewAll = authContext.user.role === "admin" || authContext.user.role === "hr" || authContext.user.role === "manager";
+    const canViewAll = ["admin", "hr", "manager"].includes(authContext.role);
     if (!canViewAll) {
       employeeId = authContext.employee?.id;
     }

@@ -1,0 +1,32 @@
+import { NextRequest } from "next/server";
+import { z } from "zod";
+import { payrollService } from "@/features/payroll/payroll.service";
+import { errorResponse, successResponse, validateParams } from "@/lib/api";
+import { getAuthContext, requirePermission } from "@/lib/auth/session";
+
+const periodIdParamSchema = z.object({
+  periodId: z
+    .string()
+    .transform((val) => Number(val))
+    .refine((val) => !isNaN(val) && val > 0, {
+      message: "Valid numeric periodId parameter is required",
+    }),
+});
+
+type RouteParams = {
+  params: Promise<{ periodId: string }>;
+};
+
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "payroll:manage");
+
+    const { periodId } = await validateParams(params, periodIdParamSchema);
+    const result = await payrollService.finalizePayroll(periodId);
+
+    return successResponse(result, undefined, "Payroll finalized successfully");
+  } catch (error) {
+    return errorResponse(error);
+  }
+}

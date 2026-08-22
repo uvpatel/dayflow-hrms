@@ -17,7 +17,7 @@ export const BackgroundLines = ({
   return (
     <div
       className={cn(
-        "h-[20rem] md:h-screen w-full bg-white dark:bg-black",
+        "h-20rem md:h-screen w-full bg-white dark:bg-black",
         className
       )}
     >
@@ -114,8 +114,8 @@ const SVG = ({
             ease: "linear",
             repeat: Infinity,
             repeatType: "loop",
-            delay: Math.floor(Math.random() * 10),
-            repeatDelay: Math.floor(Math.random() * 10 + 2),
+            delay: (idx * 2) % 10,
+            repeatDelay: ((idx * 3) % 8) + 2,
           }}
           key={`path-first-${idx}`}
         />
@@ -136,8 +136,8 @@ const SVG = ({
             ease: "linear",
             repeat: Infinity,
             repeatType: "loop",
-            delay: Math.floor(Math.random() * 10),
-            repeatDelay: Math.floor(Math.random() * 10 + 2),
+            delay: ((idx + 3) * 2) % 10,
+            repeatDelay: (((idx + 2) * 3) % 8) + 2,
           }}
           key={`path-second-${idx}`}
         />

@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { SiteHeader } from "@/components/main/site-header";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +58,6 @@ const plans = [
 export default function PricingPage() {
   return (
     <div className="flex flex-1 flex-col min-h-screen bg-background">
-      <SiteHeader title="Plans & Pricing" />
       <div className="flex flex-1 flex-col gap-8 p-6 md:p-10 max-w-6xl mx-auto w-full">
         <div className="text-center space-y-3">
           <Badge variant="outline" className="text-xs uppercase tracking-wider text-primary border-primary/30">

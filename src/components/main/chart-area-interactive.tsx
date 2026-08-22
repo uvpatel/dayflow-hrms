@@ -142,13 +142,9 @@ const chartConfig = {
 
 export function ChartAreaInteractive() {
   const isMobile = useIsMobile()
-  const [timeRange, setTimeRange] = React.useState("90d")
+  const [userSelectedRange, setUserSelectedRange] = React.useState<string | null>(null)
+  const timeRange = userSelectedRange ?? (isMobile ? "7d" : "90d")
 
-  React.useEffect(() => {
-    if (isMobile) {
-      setTimeRange("7d")
-    }
-  }, [isMobile])
 
   const filteredData = chartData.filter((item) => {
     const date = new Date(item.date)
@@ -176,13 +172,15 @@ export function ChartAreaInteractive() {
         </CardDescription>
         <CardAction>
           <ToggleGroup
-            multiple={false}
-            value={timeRange ? [timeRange] : []}
-            onValueChange={(value) => {
-              setTimeRange(value[0] ?? "90d")
+            value={[timeRange]}
+            onValueChange={(values) => {
+              const value = values[0]
+              if (value) {
+                setUserSelectedRange(value)
+              }
             }}
             variant="outline"
-            className="hidden *:data-[slot=toggle-group-item]:px-4! @[767px]/card:flex"
+            className="hidden *:data-[slot=toggle-group-item]:px-3 @[767px]/card:flex"
           >
             <ToggleGroupItem value="90d">Last 3 months</ToggleGroupItem>
             <ToggleGroupItem value="30d">Last 30 days</ToggleGroupItem>
@@ -190,9 +188,9 @@ export function ChartAreaInteractive() {
           </ToggleGroup>
           <Select
             value={timeRange}
-            onValueChange={(value) => {
+            onValueChange={(value: string | null) => {
               if (value !== null) {
-                setTimeRange(value)
+                setUserSelectedRange(value)
               }
             }}
           >

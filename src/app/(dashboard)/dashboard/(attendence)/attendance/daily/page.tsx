@@ -1,11 +1,5 @@
-import { SiteHeader } from '@/components/main/site-header'
-import React from 'react'
+import AttendancePage from "../page";
 
-export default function DailyPage() {
-  return (
-    <div>
-      <SiteHeader />
-      <h1>Welcome to Daily Page!</h1>
-    </div>
-  )
+export default function AttendanceDailyPage() {
+  return <AttendancePage />;
 }

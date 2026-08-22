@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import {
   CalendarCheck,
-  Clock,
   LogIn,
   LogOut,
   Search,
@@ -16,7 +15,6 @@ import {
   UserCheck,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -142,8 +140,7 @@ export default function AttendancePage() {
           setUserCheckIn(checkInJson.data);
         }
       }
-    } catch (error) {
-      console.error("Failed to load attendance:", error);
+    } catch {
       toast.error("Failed to fetch attendance records");
     } finally {
       setLoading(false);
@@ -168,10 +165,9 @@ export default function AttendancePage() {
         setUserCheckIn(data.data);
         fetchData();
       } else {
-        toast.error(data.error || "Failed to check in");
+        toast.error(data.error?.message || data.error || "Failed to check in");
       }
-    } catch (err) {
-      console.error("Check-in error:", err);
+    } catch {
       toast.error("An error occurred during check-in");
     } finally {
       setActionLoading(false);
@@ -192,10 +188,9 @@ export default function AttendancePage() {
         setUserCheckIn(data.data);
         fetchData();
       } else {
-        toast.error(data.error || "Failed to check out");
+        toast.error(data.error?.message || data.error || "Failed to check out");
       }
-    } catch (err) {
-      console.error("Check-out error:", err);
+    } catch {
       toast.error("An error occurred during check-out");
     } finally {
       setActionLoading(false);
@@ -212,7 +207,7 @@ export default function AttendancePage() {
         ? new Date(`${manualDate}T${manualCheckOut}:00`)
         : null;
 
-      const res = await fetch("/api/v1/attendence", {
+      const res = await fetch("/api/v1/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -230,10 +225,9 @@ export default function AttendancePage() {
         setIsManualOpen(false);
         fetchData();
       } else {
-        toast.error(data.error || "Failed to save entry");
+        toast.error(data.error?.message || data.error || "Failed to save entry");
       }
-    } catch (err) {
-      console.error("Manual entry error:", err);
+    } catch {
       toast.error("Failed to submit manual attendance");
     } finally {
       setActionLoading(false);
@@ -389,7 +383,7 @@ export default function AttendancePage() {
                   <Button type="submit" disabled={actionLoading}>
                     {actionLoading ? "Saving..." : "Save Entry"}
                   </Button>
-                  <DrawerClose >
+                  <DrawerClose>
                     <Button variant="outline">Cancel</Button>
                   </DrawerClose>
                 </DrawerFooter>
@@ -530,9 +524,11 @@ export default function AttendancePage() {
 
             <Select
               value={statusFilter}
-              onValueChange={(val:any) => {
-                setStatusFilter(val);
-                setPage(1);
+              onValueChange={(val: string | null) => {
+                if (val) {
+                  setStatusFilter(val);
+                  setPage(1);
+                }
               }}
             >
               <SelectTrigger className="w-[130px]">

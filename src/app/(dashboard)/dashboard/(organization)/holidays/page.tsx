@@ -1,6 +1,5 @@
 "use client";
 
-import { SiteHeader } from "@/components/main/site-header";
 import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Calendar, Sparkles } from "lucide-react";
@@ -45,7 +44,6 @@ export default function HolidayPage() {
 
   return (
     <div className="flex flex-1 flex-col min-h-screen bg-background">
-      <SiteHeader title="Company Holidays" />
       <div className="p-6 md:p-10 max-w-4xl mx-auto w-full space-y-6">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">

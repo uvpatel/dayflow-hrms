@@ -35,7 +35,6 @@ import {
   BarChart,
 } from "recharts";
 
-import { SiteHeader } from "@/components/main/site-header";
 import {
   Card,
   CardContent,
@@ -295,7 +294,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <SiteHeader title="HRMS Overview" />
+      
 
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         {/* Welcome & Live Punch Action Banner */}

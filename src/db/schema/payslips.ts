@@ -5,6 +5,8 @@ export const payslips = pgTable(
   "payslips",
   {
     id: serial("id").primaryKey(),
+    name: text("name"),
+    description: text("description"),
     employeeId: integer("employee_id"),
     organizationId: integer("organization_id"),
     month: text("month"),
@@ -23,6 +25,8 @@ export const payslips = pgTable(
 
 export const payslipSchema = z.object({
   id: z.number().int().optional(),
+  name: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
   employeeId: z.number().int().optional().nullable(),
   organizationId: z.number().int().optional().nullable(),
   month: z.string().optional().nullable(),

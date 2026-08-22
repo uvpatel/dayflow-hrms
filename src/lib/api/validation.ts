@@ -6,7 +6,7 @@ export async function validateBody<T>(request: NextRequest, schema: ZodSchema<T>
   let body: unknown;
   try {
     body = await request.json();
-  } catch (err) {
+  } catch {
     throw new ValidationError("Invalid JSON in request body");
   }
 

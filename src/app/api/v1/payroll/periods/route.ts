@@ -1,23 +1,43 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth-context";
-import { db } from "@/db";
-import { payrollPeriods } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { NextRequest } from "next/server";
+import { payrollService } from "@/features/payroll/payroll.service";
+import { createPayrollPeriodSchema } from "@/features/payroll/payroll.schemas";
+import {
+  createdResponse,
+  errorResponse,
+  paginatedResponse,
+  parsePagination,
+  buildPaginationMeta,
+  validateBody,
+} from "@/lib/api";
+import { getAuthContext, requirePermission } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const { error, ctx } = await requireAuth(request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const whereClause = ctx.organizationId ? eq(payrollPeriods.organizationId, ctx.organizationId) : undefined;
-    const data = await db.select().from(payrollPeriods).where(whereClause).orderBy(desc(payrollPeriods.createdAt));
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "payroll:read:any");
 
-    return NextResponse.json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    console.error("Error fetching payroll periods:", err);
-    return NextResponse.json({ success: false, error: "Failed to fetch payroll periods" }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const { page, limit, offset } = parsePagination(searchParams, 20);
+
+    const { items, total } = await payrollService.listPeriods(limit, offset);
+    const meta = buildPaginationMeta(page, limit, total);
+
+    return paginatedResponse(items, meta, "Payroll periods fetched successfully");
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "payroll:manage");
+
+    const data = await validateBody(request, createPayrollPeriodSchema);
+    const created = await payrollService.createPeriod(data);
+
+    return createdResponse(created, "Payroll period created successfully");
+  } catch (error) {
+    return errorResponse(error);
   }
 }

@@ -10,9 +10,10 @@ import {
   Building2,
   Settings2,
   LayoutDashboard,
+  BarChart3,
 } from "lucide-react";
 
-import { NavMain } from "@/components/sidebar/navmain";
+import { NavMain, type NavMainItem } from "@/components/sidebar/navmain";
 import { NavUser } from "@/components/sidebar/nav-user";
 import { TeamSwitcher } from "@/components/sidebar/team-switcher";
 import {
@@ -34,14 +35,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const teams = [
     {
-      name: isAdmin ? "Dayflow Admin" : isHR ? "Dayflow HR" : isManager ? "Dayflow Team" : "Dayflow HRMS",
+      name: isAdmin ? "Dayflow Enterprise" : isHR ? "Dayflow HR" : isManager ? "Dayflow Team" : "Dayflow HRMS",
       logo: Building2,
-      plan: isAdmin ? "Enterprise Admin" : "Workforce",
+      plan: isAdmin ? "Administrator" : isHR ? "HR Operations" : isManager ? "Manager" : "Employee Portal",
     },
   ];
 
-  // Dynamic role-aware navigation
-  const navMain = [
+  // Dynamic role-aware canonical navigation
+  const navMain: NavMainItem[] = [
     {
       title: "Dashboard",
       url: "/dashboard",
@@ -60,7 +61,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             items: [
               { title: "Directory", url: "/dashboard/people" },
               { title: "Onboarding", url: "/dashboard/people/onboarding" },
-              { title: "Profile", url: "/dashboard/people/profile" },
+              { title: "My Profile", url: "/dashboard/people/profile" },
             ],
           },
         ]
@@ -79,9 +80,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: "/dashboard/attendance",
       icon: CalendarCheck,
       items: [
+        { title: "Overview", url: "/dashboard/attendance" },
         { title: "Daily View", url: "/dashboard/attendance/daily" },
         { title: "Weekly View", url: "/dashboard/attendance/weekly" },
-        { title: "Regularization", url: "/dashboard/attendance/regulize" },
+        { title: "Corrections", url: "/dashboard/attendance/corrections" },
       ],
     },
     {
@@ -98,10 +100,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       ? [
           {
             title: "Approvals",
-            url: "/dashboard/approvels/leave",
+            url: "/dashboard/approvals",
             icon: CheckCircle2,
             items: [
-              { title: "Leave Requests", url: "/dashboard/approvels/leave" },
+              { title: "All Approvals", url: "/dashboard/approvals" },
+              { title: "Leave Requests", url: "/dashboard/approvals/leave" },
+              { title: "Attendance", url: "/dashboard/approvals/attendance" },
             ],
           },
         ]
@@ -112,7 +116,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: Wallet,
       items: [
         { title: "My Payslips", url: "/dashboard/payroll" },
-        ...(isHR ? [{ title: "Salary Structure", url: "/dashboard/structured" }] : []),
+        ...(isHR
+          ? [
+              { title: "Pay Periods", url: "/dashboard/payroll/periods" },
+              { title: "Salary Structures", url: "/dashboard/payroll/salary-structures" },
+            ]
+          : []),
       ],
     },
     ...(isHR
@@ -122,29 +131,45 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             url: "/dashboard/organization",
             icon: Building2,
             items: [
+              { title: "Overview", url: "/dashboard/organization" },
               { title: "Departments", url: "/dashboard/organization/departments" },
-              { title: "Roles", url: "/dashboard/roles" },
-              { title: "Holidays", url: "/dashboard/holidays" },
+              { title: "Holidays", url: "/dashboard/organization/holidays" },
             ],
           },
         ]
       : [
           {
             title: "Organization",
-            url: "/dashboard/holidays",
+            url: "/dashboard/organization/holidays",
             icon: Building2,
             items: [
-              { title: "Holidays", url: "/dashboard/holidays" },
+              { title: "Company Holidays", url: "/dashboard/organization/holidays" },
             ],
           },
         ]),
+    ...(isHR
+      ? [
+          {
+            title: "Reports",
+            url: "/dashboard/reports",
+            icon: BarChart3,
+            items: [
+              { title: "Overview", url: "/dashboard/reports" },
+              { title: "Attendance", url: "/dashboard/reports/attendance" },
+              { title: "Leave", url: "/dashboard/reports/leave" },
+              { title: "Payroll", url: "/dashboard/reports/payroll" },
+            ],
+          },
+        ]
+      : []),
     {
       title: "Settings",
       url: "/dashboard/settings",
       icon: Settings2,
       items: [
         { title: "General", url: "/dashboard/settings" },
-        { title: "Billing", url: "/dashboard/settings/billing" },
+        { title: "My Profile", url: "/dashboard/settings/profile" },
+        ...(isAdmin ? [{ title: "Roles & Permissions", url: "/dashboard/settings/roles" }] : []),
       ],
     },
   ];
