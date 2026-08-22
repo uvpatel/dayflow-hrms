@@ -1,10 +1,13 @@
-"use client"
+"use client";
 
+import * as React from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-} from "@/components/ui/avatar"
+} from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,29 +16,82 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
-import { SignOutButton, useUser } from "@clerk/nextjs"
-import { EllipsisVerticalIcon, CircleUserRoundIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
-import Link from "next/link"
+} from "@/components/ui/sidebar";
+import {
+  ChevronsUpDownIcon,
+  SparklesIcon,
+  BadgeCheckIcon,
+  CreditCardIcon,
+  BellIcon,
+  LogOutIcon,
+  Loader2Icon,
+} from "lucide-react";
+import { authClient } from "@/lib/auth-client";
+import Link from "next/link";
+import { ModeToggle } from "@/components/toggler";
+
+function getInitials(name?: string | null, email?: string | null): string {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
+  if (email && email.trim()) {
+    return email.slice(0, 2).toUpperCase();
+  }
+  return "U";
+}
 
 export function NavUser({
-  username,
+  user: initialUser,
 }: {
-  username: {
-    name: string
-    email: string
-    avatar: string
-  }
+  user?: {
+    name?: string;
+    email?: string;
+    avatar?: string;
+  };
 }) {
-  const { isMobile } = useSidebar()
+  const { isMobile } = useSidebar();
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const { user } = useUser()
+  const { data: session } = authClient.useSession();
+
+  const user = session?.user || initialUser;
+
+  const displayName = user?.name || user?.email?.split("@")[0] || "User";
+  const displayEmail = user?.email || "";
+  const displayAvatar = (user as { image?: string })?.image || initialUser?.avatar || "";
+  const initials = getInitials(user?.name, user?.email);
+
+  const handleSignOut = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    try {
+      await authClient.signOut({
+        fetchOptions: {
+          onSuccess: () => {
+            router.replace("/sign-in");
+            router.refresh();
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Sign out error:", error);
+      router.replace("/sign-in");
+      router.refresh();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <SidebarMenu>
@@ -46,20 +102,20 @@ export function NavUser({
               <SidebarMenuButton size="lg" className="aria-expanded:bg-muted" />
             }
           >
-            <Avatar className="size-8 rounded-lg grayscale">
-              <AvatarImage src={user?.imageUrl} alt="useravatar" />
-              <AvatarFallback className="rounded-lg">{user?.firstName?.charAt(0)}</AvatarFallback>
+            <Avatar>
+              <AvatarImage src={displayAvatar} alt={displayName} />
+              <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{user?.firstName} {user?.lastName}</span>
-              <span className="truncate text-xs text-foreground/70">
-                {user?.emailAddresses?.[0]?.emailAddress}
+              <span className="truncate font-medium">{displayName}</span>
+              <span className="truncate text-xs text-muted-foreground">
+                {displayEmail}
               </span>
             </div>
-            <EllipsisVerticalIcon className="ml-auto size-4" />
+            <ChevronsUpDownIcon className="ml-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="min-w-56"
+            className="w-56"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
@@ -67,14 +123,14 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                  <Avatar className="size-8">
-                    <AvatarImage src={user?.imageUrl} alt="useravatar" />
-                    <AvatarFallback className="rounded-lg">{user?.firstName?.charAt(0)}</AvatarFallback>
+                  <Avatar>
+                    <AvatarImage src={displayAvatar} alt={displayName} />
+                    <AvatarFallback>{initials}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{user?.firstName} {user?.lastName}</span>
+                    <span className="truncate font-medium">{displayName}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {user?.emailAddresses?.[0]?.emailAddress}
+                      {displayEmail}
                     </span>
                   </div>
                 </div>
@@ -82,31 +138,52 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem render={<Link href="/account" />}>
-                <CircleUserRoundIcon />
-                <span>Account</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem render={<Link href="/billing" />}>
-                <CreditCardIcon />
-                <span>Billing</span>
-              </DropdownMenuItem> 
-              <DropdownMenuItem render={<Link href="/notifications" />}>
-                <BellIcon />
-                <span>Notifications</span> 
+              <DropdownMenuItem>
+                <SparklesIcon />
+                Upgrade to Pro
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <SignOutButton redirectUrl="/sign-in">
-                <div className="flex items-center gap-2 w-full cursor-pointer">
-                  <LogOutIcon className="size-4" />
-                  <span>Log out</span>
-                </div>
-              </SignOutButton>
+                <DropdownMenuGroup>
+              <DropdownMenuItem>
+                <ModeToggle />
+                Theme
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem>
+                <BadgeCheckIcon />
+                Account
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <CreditCardIcon />
+                <Link href="/billing">Billing</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                
+
+                <BellIcon />
+                <Link href="/notifications">Notifications</Link>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              disabled={isLoggingOut}
+              className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
+            >
+              {isLoggingOut ? (
+                <Loader2Icon className="animate-spin" />
+              ) : (
+                <LogOutIcon />
+              )}
+              {isLoggingOut ? "Signing out..." : "Sign Out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  )
+  );
 }
+
