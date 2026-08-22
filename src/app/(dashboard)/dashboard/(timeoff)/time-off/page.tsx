@@ -81,7 +81,7 @@ export default function TimeOffPage() {
   const { data: allocationsData } = useLeaveAllocations(currentEmployeeId);
   const submitLeaveMutation = useSubmitLeaveRequest();
 
-  const leaveRequests = leaveData?.items ?? [];
+  const leaveRequests = useMemo(() => leaveData?.items ?? [], [leaveData]);
   const leaveTypes = leaveTypesData ?? [];
   const allocations = allocationsData ?? [];
 

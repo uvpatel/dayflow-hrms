@@ -54,8 +54,9 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { useAttendance, useCheckIn, useCheckOut } from "@/hooks/use-attendance";
+import { useAttendance, useCheckIn, useCheckOut, useTodayAttendance } from "@/hooks/use-attendance";
 import { useEmployees } from "@/hooks/use-employees";
+import { useMe } from "@/hooks/use-me";
 
 export default function AttendancePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,12 +80,21 @@ export default function AttendancePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const { data: attendanceData, isLoading, refetch } = useAttendance({ limit: 100 });
+  const { data: attendanceData, isLoading, isError, error, refetch } = useAttendance({ limit: 100 });
   const { data: employeesData } = useEmployees({ limit: 100 });
+  const { data: me } = useMe();
+  const role = (me?.user.role ?? me?.employee?.role ?? "employee").toLowerCase();
+  const canManageAttendance = role === "hr" || role === "admin";
   const checkInMutation = useCheckIn();
   const checkOutMutation = useCheckOut();
+  const todayAttendanceQuery = useTodayAttendance();
+  const hasCheckedIn = Boolean(todayAttendanceQuery.data?.checkInTime);
+  const hasCheckedOut = Boolean(todayAttendanceQuery.data?.checkOutTime);
 
-  const attendances = attendanceData?.items ?? [];
+  const attendances = useMemo(
+    () => attendanceData?.items ?? [],
+    [attendanceData?.items]
+  );
   const employees = useMemo(() => {
     const map: Record<string, { firstName: string; lastName: string; email: string }> = {};
     (employeesData?.items ?? []).forEach((emp) => {
@@ -97,7 +107,7 @@ export default function AttendancePage() {
   // Handle Punch In
   const handleCheckIn = async () => {
     try {
-      await checkInMutation.mutateAsync({});
+      await checkInMutation.mutateAsync();
       toast.success("Checked in successfully!");
       refetch();
     } catch (err: unknown) {
@@ -109,7 +119,7 @@ export default function AttendancePage() {
   // Handle Punch Out
   const handleCheckOut = async () => {
     try {
-      await checkOutMutation.mutateAsync({});
+      await checkOutMutation.mutateAsync();
       toast.success("Checked out successfully!");
       refetch();
     } catch (err: unknown) {
@@ -225,12 +235,13 @@ export default function AttendancePage() {
             Refresh
           </Button>
 
-          <Drawer open={isManualOpen} onOpenChange={setIsManualOpen}>
-            <DrawerTrigger  >
-              <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
+          {canManageAttendance ? (
+            <Drawer open={isManualOpen} onOpenChange={setIsManualOpen}>
+            <DrawerTrigger
+              render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}
+            >
                 <Plus className="size-4" />
                 Add Record
-              </Button>
             </DrawerTrigger>
             <DrawerContent>
               <form onSubmit={handleManualSubmit}>
@@ -300,13 +311,14 @@ export default function AttendancePage() {
                 </div>
                 <DrawerFooter className="max-w-md mx-auto w-full">
                   <Button type="submit">Save Entry</Button>
-                  <DrawerClose  >
-                    <Button variant="outline">Cancel</Button>
+                  <DrawerClose render={<Button variant="outline" />}>
+                    Cancel
                   </DrawerClose>
                 </DrawerFooter>
               </form>
             </DrawerContent>
-          </Drawer>
+            </Drawer>
+          ) : null}
         </div>
       </div>
 
@@ -329,7 +341,7 @@ export default function AttendancePage() {
             <div className="flex gap-2">
               <Button
                 onClick={handleCheckIn}
-                disabled={checkInMutation.isPending}
+                disabled={checkInMutation.isPending || hasCheckedIn || todayAttendanceQuery.isLoading}
                 className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
               >
                 <LogIn className="size-4" />
@@ -337,7 +349,7 @@ export default function AttendancePage() {
               </Button>
               <Button
                 onClick={handleCheckOut}
-                disabled={checkOutMutation.isPending}
+                disabled={checkOutMutation.isPending || !hasCheckedIn || hasCheckedOut || todayAttendanceQuery.isLoading}
                 variant="destructive"
                 className="w-full gap-2 shadow-sm"
               >
@@ -473,6 +485,17 @@ export default function AttendancePage() {
                       <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                         <RefreshCw className="size-6 animate-spin text-primary" />
                         <span>Loading attendance records...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : isError ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-32 text-center">
+                      <div className="flex flex-col items-center gap-3 text-sm text-destructive">
+                        <span>Attendance records could not be loaded: {error.message}</span>
+                        <Button variant="outline" size="sm" onClick={() => void refetch()}>
+                          Try again
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>

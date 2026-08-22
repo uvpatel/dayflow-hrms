@@ -1,6 +1,14 @@
 import React from "react";
 import { useId } from "react";
 
+const DEFAULT_GRID_PATTERN = [
+  [8, 1],
+  [10, 3],
+  [7, 5],
+  [9, 2],
+  [10, 6],
+];
+
 export default function FeaturesSectionDemo() {
   return (
     <div className="py-20 lg:py-40">
@@ -26,44 +34,44 @@ export default function FeaturesSectionDemo() {
 
 const grid = [
   {
-    title: "HIPAA and SOC2 Compliant",
+    title: "Secure Authentication & Role-Based Access",
     description:
-      "Our applications are HIPAA and SOC2 compliant, your data is safe with us, always.",
+      "Protect employee information with secure sign-in, email verification, GitHub authentication, and role-based access for employees, managers, HR officers, and administrators.",
   },
   {
-    title: "Automated Social Media Posting",
+    title: "Employee Profile Management",
     description:
-      "Schedule and automate your social media posts across multiple platforms to save time and maintain a consistent online presence.",
+      "Manage personal details, job information, departments, designations, reporting managers, documents, profile pictures, and employment records from one place.",
   },
   {
-    title: "Advanced Analytics",
+    title: "Smart Attendance Tracking",
     description:
-      "Gain insights into your social media performance with detailed analytics and reporting tools to measure engagement and ROI.",
+      "Allow employees to check in and check out while automatically tracking working hours, late arrivals, half-days, absences, overtime, and attendance corrections.",
   },
   {
-    title: "Content Calendar",
+    title: "Leave & Time-Off Management",
     description:
-      "Plan and organize your social media content with an intuitive calendar view, ensuring you never miss a post.",
+      "Let employees check leave balances, request paid, sick, or unpaid leave, track request status, and receive immediate updates when requests are reviewed.",
   },
   {
-    title: "Audience Targeting",
+    title: "Approval Workflows",
     description:
-      "Reach the right audience with advanced targeting options, including demographics, interests, and behaviors.",
+      "Give managers and HR officers a centralized workspace to review, approve, or reject leave requests and attendance corrections with comments and complete approval history.",
   },
   {
-    title: "Social Listening",
+    title: "Payroll & Payslip Management",
     description:
-      "Monitor social media conversations and trends to stay informed about what your audience is saying and respond in real-time.",
+      "Manage salary structures, allowances, deductions, payroll cycles, and payslips while giving employees secure, read-only access to their salary information.",
   },
   {
-    title: "Customizable Templates",
+    title: "Organization & Team Management",
     description:
-      "Create stunning social media posts with our customizable templates, designed to fit your brand's unique style and voice.",
+      "Organize employees by department, designation, office location, work schedule, and reporting manager while providing managers with a complete view of their teams.",
   },
   {
-    title: "Collaboration Tools",
+    title: "HR Analytics & Reports",
     description:
-      "Work seamlessly with your team using our collaboration tools, allowing you to assign tasks, share drafts, and provide feedback in real-time.",
+      "Monitor employee headcount, attendance trends, leave usage, payroll summaries, department distribution, and pending approvals through real-time dashboards and reports.",
   },
 ];
 
@@ -74,13 +82,7 @@ export const Grid = ({
   pattern?: number[][];
   size?: number;
 }) => {
-  const p = pattern ?? [
-    [Math.floor(Math.random() * 4) + 7, Math.floor(Math.random() * 6) + 1],
-    [Math.floor(Math.random() * 4) + 7, Math.floor(Math.random() * 6) + 1],
-    [Math.floor(Math.random() * 4) + 7, Math.floor(Math.random() * 6) + 1],
-    [Math.floor(Math.random() * 4) + 7, Math.floor(Math.random() * 6) + 1],
-    [Math.floor(Math.random() * 4) + 7, Math.floor(Math.random() * 6) + 1],
-  ];
+  const p = pattern ?? DEFAULT_GRID_PATTERN;
   return (
     <div className="pointer-events-none absolute left-1/2 top-0  -ml-20 -mt-2 h-full w-full [mask-image:linear-gradient(white,transparent)]">
       <div className="absolute inset-0 bg-gradient-to-r  [mask-image:radial-gradient(farthest-side_at_top,white,transparent)] dark:from-zinc-900/30 from-zinc-100/30 to-zinc-300/30 dark:to-zinc-900/30 opacity-100">
@@ -97,7 +99,22 @@ export const Grid = ({
   );
 };
 
-export function GridPattern({ width, height, x, y, squares, ...props }: any) {
+type GridPatternProps = React.ComponentPropsWithoutRef<"svg"> & {
+  width: number;
+  height: number;
+  x: number | string;
+  y: number | string;
+  squares?: number[][];
+};
+
+export function GridPattern({
+  width,
+  height,
+  x,
+  y,
+  squares,
+  ...props
+}: GridPatternProps) {
   const patternId = useId();
 
   return (
@@ -122,14 +139,14 @@ export function GridPattern({ width, height, x, y, squares, ...props }: any) {
       />
       {squares && (
         <svg x={x} y={y} className="overflow-visible">
-          {squares.map(([x, y]: any) => (
+          {squares.map(([squareX, squareY]) => (
             <rect
               strokeWidth="0"
-              key={`${x}-${y}`}
+              key={`${squareX}-${squareY}`}
               width={width + 1}
               height={height + 1}
-              x={x * width}
-              y={y * height}
+              x={squareX * width}
+              y={squareY * height}
             />
           ))}
         </svg>

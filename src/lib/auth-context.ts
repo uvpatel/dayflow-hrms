@@ -4,28 +4,18 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { employees, organizations } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { Role, Permission, getRolePermissions, hasPermission } from "./permissions";
+import {
+  type Role,
+  type Permission,
+  getRolePermissions,
+  hasPermission,
+  normalizeRole,
+} from "./permissions";
 import type { Employee } from "@/db/schema/employees";
 
-export interface BetterAuthUser {
-  id: string;
-  name: string;
-  email: string;
-  emailVerified: boolean;
-  image?: string | null;
-  role?: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface BetterAuthSession {
-  id: string;
-  userId: string;
-  expiresAt: Date;
-  token: string;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-}
+type InferredSession = typeof auth.$Infer.Session;
+export type BetterAuthUser = InferredSession["user"];
+export type BetterAuthSession = InferredSession["session"];
 
 export interface AuthContext {
   session: BetterAuthSession;
@@ -72,24 +62,28 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
     return empByUserId;
   }
 
-  // 2. Check if an invitation/employee was pre-created by email
-  const [empByEmail] = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.email, user.email))
-    .limit(1);
+  // 2. A verified account may claim an unlinked employee record with the
+  // same email. First-time linking always starts at employee privilege; an
+  // administrator must explicitly approve any later role elevation.
+  if (user.emailVerified) {
+    const [empByEmail] = await db
+      .select()
+      .from(employees)
+      .where(eq(employees.email, user.email.toLowerCase()))
+      .limit(1);
 
-  if (empByEmail) {
-    // Link the userId
-    const [linked] = await db
-      .update(employees)
-      .set({
-        userId: user.id,
-        updatedAt: new Date(),
-      })
-      .where(eq(employees.id, empByEmail.id))
-      .returning();
-    return linked;
+    if (empByEmail && !empByEmail.userId) {
+      const [linked] = await db
+        .update(employees)
+        .set({
+          userId: user.id,
+          role: "employee",
+          updatedAt: new Date(),
+        })
+        .where(eq(employees.id, empByEmail.id))
+        .returning();
+      return linked;
+    }
   }
 
   // 3. If no employee record exists at all, auto-create one for the user
@@ -101,68 +95,69 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
   // Public registration is never allowed to bootstrap a privileged account.
   // Development administrators are provisioned through the explicit seed flow;
   // production role changes require an authorized server-side operation.
-  const userRole: Role = "employee";
-
-  const [newEmp] = await db
+  const [newEmployee] = await db
     .insert(employees)
     .values({
       userId: user.id,
       organizationId: defaultOrgId,
-      employeeNumber: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
+      employeeNumber: `EMP-${user.id.replace(/[^a-z0-9]/gi, "").slice(0, 12).toUpperCase()}`,
       firstName,
       lastName,
-      email: user.email,
-      role: userRole,
+      email: user.email.toLowerCase(),
+      role: "employee",
       employmentStatus: "active",
       employmentType: "full_time",
     })
+    .onConflictDoNothing({ target: employees.userId })
     .returning();
 
-  return newEmp;
+  if (newEmployee) return newEmployee;
+
+  const [concurrentlyCreatedEmployee] = await db
+    .select()
+    .from(employees)
+    .where(eq(employees.userId, user.id))
+    .limit(1);
+
+  return concurrentlyCreatedEmployee ?? null;
 }
 
 /**
  * Resolves full authentication, identity, and authorization context for the current request.
  */
-export async function getAuthContext(requestHeaders?: Headers): Promise<AuthContext | null> {
-  try {
-    const reqHeaders = requestHeaders ?? (await headers());
-    const sessionRes = await auth.api.getSession({
-      headers: reqHeaders,
-    });
+export async function getAuthContext(
+  requestHeaders?: Headers,
+): Promise<AuthContext | null> {
+  const reqHeaders = requestHeaders ?? (await headers());
+  const sessionRes = await auth.api.getSession({
+    headers: reqHeaders,
+  });
 
-    if (!sessionRes || !sessionRes.user) {
-      return null;
-    }
-
-    const authUser = sessionRes.user as BetterAuthUser;
-    const authSession = sessionRes.session as BetterAuthSession;
-
-    const employee = await resolveEmployee(authUser);
-
-    // Determine normalized role
-    let role: Role = "employee";
-    if (employee?.role && ["admin", "hr", "manager", "employee"].includes(employee.role)) {
-      role = employee.role as Role;
-    } else if (authUser.role && ["admin", "hr", "manager", "employee"].includes(authUser.role)) {
-      role = authUser.role as Role;
-    }
-
-    const organizationId = employee?.organizationId ?? null;
-    const permissions = getRolePermissions(role);
-
-    return {
-      session: authSession,
-      user: authUser,
-      employee,
-      organizationId,
-      role,
-      permissions,
-    };
-  } catch (error) {
-    console.error("Error resolving auth context:", error);
+  if (!sessionRes?.user) {
     return null;
   }
+
+  const authUser = sessionRes.user;
+  const authSession = sessionRes.session;
+
+  const employee = await resolveEmployee(authUser);
+
+  // The linked employee record is the authorization source of truth. Better
+  // Auth's user role is deliberately not used as a fallback because the two
+  // records can be temporarily out of sync during onboarding or demotion.
+  const role = normalizeRole(employee?.role);
+
+  const organizationId = employee?.organizationId ?? null;
+  const permissions = getRolePermissions(role);
+
+  return {
+    session: authSession,
+    user: authUser,
+    employee,
+    organizationId,
+    role,
+    permissions,
+  };
 }
 
 /**
@@ -200,8 +195,10 @@ export async function requireAuth(requestHeaders?: Headers) {
       error: NextResponse.json(
         {
           success: false,
-          error: "Authentication required. Please sign in.",
-          code: "AUTH_REQUIRED",
+          error: {
+            code: "AUTH_REQUIRED",
+            message: "Authentication required. Please sign in.",
+          },
         },
         { status: 401 }
       ),
@@ -215,8 +212,11 @@ export async function requireAuth(requestHeaders?: Headers) {
       error: NextResponse.json(
         {
           success: false,
-          error: "Your employee account has been deactivated. Please contact HR.",
-          code: "ACCOUNT_DISABLED",
+          error: {
+            code: "ACCOUNT_DISABLED",
+            message:
+              "Your employee account has been deactivated. Please contact HR.",
+          },
         },
         { status: 403 }
       ),
@@ -230,7 +230,10 @@ export async function requireAuth(requestHeaders?: Headers) {
 /**
  * Guard for API routes requiring specific permission.
  */
-export async function requirePermission(permission: Permission, requestHeaders?: Headers) {
+export async function requirePermission(
+  permission: Permission,
+  requestHeaders?: Headers,
+) {
   const { error, ctx } = await requireAuth(requestHeaders);
   if (error || !ctx) {
     return { error, ctx: null };
@@ -241,8 +244,10 @@ export async function requirePermission(permission: Permission, requestHeaders?:
       error: NextResponse.json(
         {
           success: false,
-          error: `Access denied. Requires '${permission}' permission.`,
-          code: "INSUFFICIENT_PERMISSION",
+          error: {
+            code: "INSUFFICIENT_PERMISSION",
+            message: `Access denied. Requires '${permission}' permission.`,
+          },
         },
         { status: 403 }
       ),

@@ -61,8 +61,11 @@ export default function ApprovalsPage() {
   const approveLeaveMutation = useApproveLeaveRequest();
   const rejectLeaveMutation = useRejectLeaveRequest();
 
-  const leaveRequests = leaveData?.items ?? [];
-  const corrections = correctionsData?.items ?? [];
+  const leaveRequests = useMemo(() => leaveData?.items ?? [], [leaveData]);
+  const corrections = useMemo(
+    () => correctionsData?.items ?? [],
+    [correctionsData],
+  );
 
   const employees = useMemo(() => {
     const map: Record<number, { firstName: string; lastName: string; email: string }> = {};

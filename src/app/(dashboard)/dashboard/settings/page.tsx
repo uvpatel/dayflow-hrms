@@ -26,7 +26,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -93,7 +92,7 @@ export default function SettingsPage() {
       // Simulate saving settings
       await new Promise((resolve) => setTimeout(resolve, 600));
       toast.success("HRMS settings updated successfully!");
-    } catch (err) {
+    } catch {
       toast.error("Failed to save settings");
     } finally {
       setLoading(false);

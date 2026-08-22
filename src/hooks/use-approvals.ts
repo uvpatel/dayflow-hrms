@@ -1,35 +1,42 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, getPaginatedData } from "@/lib/api/client";
 import type { ApprovalRequest } from "@/db/schema/approval-requests";
+import {
+  approvalKeys,
+  attendanceKeys,
+  dashboardKeys,
+  leaveKeys,
+  notificationKeys,
+} from "@/lib/query-keys";
+
+export { approvalKeys } from "@/lib/query-keys";
 
 export interface ApprovalsFilterParams {
+  page?: number;
   limit?: number;
   offset?: number;
   status?: string;
   approverId?: number;
 }
 
-export const approvalKeys = {
-  all: ["approvals"] as const,
-  lists: () => [...approvalKeys.all, "list"] as const,
-  list: (params?: ApprovalsFilterParams) => [...approvalKeys.lists(), params] as const,
-};
-
 export function useApprovals(params?: ApprovalsFilterParams) {
   return useQuery({
     queryKey: approvalKeys.list(params),
     queryFn: async () => {
       const searchParams = new URLSearchParams();
+      if (params?.page) searchParams.set("page", params.page.toString());
       if (params?.limit) searchParams.set("limit", params.limit.toString());
       if (params?.offset) searchParams.set("offset", params.offset.toString());
       if (params?.status) searchParams.set("status", params.status);
       if (params?.approverId) searchParams.set("approverId", params.approverId.toString());
 
       const qs = searchParams.toString();
-      const res = await apiClient<{ items: ApprovalRequest[]; total: number }>(
+      const res = await apiClient<
+        ApprovalRequest[] | { items: ApprovalRequest[]; total: number }
+      >(
         `/api/v1/approvals${qs ? `?${qs}` : ""}`
       );
-      return res.data ?? { items: [], total: 0 };
+      return getPaginatedData(res);
     },
   });
 }
@@ -43,8 +50,14 @@ export function useApproveRequest() {
       });
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: approvalKeys.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+        queryClient.invalidateQueries({ queryKey: leaveKeys.all }),
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: notificationKeys.all }),
+      ]);
     },
   });
 }
@@ -59,8 +72,14 @@ export function useRejectRequest() {
       });
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: approvalKeys.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+        queryClient.invalidateQueries({ queryKey: leaveKeys.all }),
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: notificationKeys.all }),
+      ]);
     },
   });
 }

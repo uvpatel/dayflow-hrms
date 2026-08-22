@@ -1,10 +1,9 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { user } from "@/db/schema/auth-schema";
 import { ilike, or, desc } from "drizzle-orm";
-import { SearchUsers } from "./SearchUsers";
+import SearchUsers from "./SearchUser";
 import { removeRole, setRole } from "./_actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +25,10 @@ export default async function AdminDashboard({
 
   if (!ctx) {
     redirect("/sign-in");
+  }
+
+  if (ctx.role !== "admin") {
+    redirect("/dashboard");
   }
 
  
@@ -95,7 +98,7 @@ export default async function AdminDashboard({
                     className={`capitalize text-xs font-semibold ${
                       u.role === "admin"
                         ? "bg-primary/10 text-primary border-primary/20"
-                        : u.role === "moderator"
+                        : u.role === "hr"
                         ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
                         : "bg-muted text-muted-foreground"
                     }`}
@@ -124,15 +127,29 @@ export default async function AdminDashboard({
 
                     <form action={setRole}>
                       <input type="hidden" name="id" value={u.id} />
-                      <input type="hidden" name="role" value="moderator" />
+                      <input type="hidden" name="role" value="hr" />
                       <Button
                         type="submit"
                         size="sm"
                         variant="outline"
-                        disabled={u.role === "moderator"}
+                        disabled={u.role === "hr"}
                         className="text-xs h-8"
                       >
-                        Make Moderator
+                        Make HR
+                      </Button>
+                    </form>
+
+                    <form action={setRole}>
+                      <input type="hidden" name="id" value={u.id} />
+                      <input type="hidden" name="role" value="manager" />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="outline"
+                        disabled={u.role === "manager"}
+                        className="text-xs h-8"
+                      >
+                        Make Manager
                       </Button>
                     </form>
 
@@ -142,10 +159,10 @@ export default async function AdminDashboard({
                         type="submit"
                         size="sm"
                         variant="ghost"
-                        disabled={u.role === "user" || !u.role}
+                        disabled={u.role === "employee"}
                         className="text-xs h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
-                        Remove Role
+                        Make Employee
                       </Button>
                     </form>
                   </div>

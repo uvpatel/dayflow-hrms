@@ -1,10 +1,8 @@
 import React from "react";
 import { BackgroundLines } from "@/components/ui/background-lines";
 import HoverBorderGradientDemo from "./hover-border-gradient-demo";
-import Link from "next/link"
 
 export default function BackgroundLinesDemo() {
-  const today = new Date();
   return (
     <BackgroundLines className="flex items-center justify-center w-full flex-col px-4">
       

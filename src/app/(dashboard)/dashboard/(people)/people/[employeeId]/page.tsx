@@ -4,18 +4,13 @@ import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   User,
-  Mail,
-  Phone,
   Building2,
   Briefcase,
   MapPin,
   Calendar,
-  DollarSign,
-  FileText,
   Clock,
   ArrowLeft,
   Edit,
-  CheckCircle2,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";

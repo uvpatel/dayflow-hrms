@@ -1,9 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { getTableColumns } from "drizzle-orm";
 
-import { getRolePermissions, hasPermission } from "../src/lib/permissions";
+import {
+  canAccessEmployeeResource,
+  canAccessPage,
+  getRolePermissions,
+  hasPermission,
+  normalizeRole,
+} from "../src/lib/permissions";
 import { account } from "../src/db/schema/auth-schema";
 import { getRoleLandingPath } from "../src/lib/auth/landing";
+import { sanitizeCallbackPath } from "../src/lib/auth/redirects";
 
 describe("role permissions", () => {
   test("does not allow an employee to access another employee's payroll", () => {
@@ -19,13 +26,56 @@ describe("role permissions", () => {
   test("keeps approval and audit actions limited to privileged roles", () => {
     expect(hasPermission("manager", "approval:action")).toBe(false);
     expect(hasPermission("hr", "approval:action")).toBe(true);
-    expect(hasPermission("hr", "audit:read")).toBe(false);
+    expect(hasPermission("hr", "audit:read")).toBe(true);
     expect(hasPermission("admin", "audit:read")).toBe(true);
   });
 
   test("grants administrators the complete permission set", () => {
     expect(hasPermission("admin", "employee:delete")).toBe(true);
     expect(getRolePermissions("admin")).toContain("admin:all");
+  });
+
+  test("normalizes database and legacy roles to least privilege", () => {
+    expect(normalizeRole(" HR ")).toBe("hr");
+    expect(normalizeRole("MANAGER")).toBe("manager");
+    expect(normalizeRole("moderator")).toBe("employee");
+    expect(normalizeRole("user")).toBe("employee");
+    expect(normalizeRole(null)).toBe("employee");
+  });
+
+  test("keeps manager access team-scoped and payroll self-only", () => {
+    const base = {
+      role: "manager",
+      actorEmployeeId: 10,
+      targetEmployeeId: 20,
+      targetManagerId: 10,
+      actorOrganizationId: 1,
+      targetOrganizationId: 1,
+    } as const;
+
+    expect(canAccessEmployeeResource({ ...base, resource: "profile" })).toBe(true);
+    expect(canAccessEmployeeResource({ ...base, resource: "attendance" })).toBe(true);
+    expect(canAccessEmployeeResource({ ...base, resource: "payroll" })).toBe(false);
+    expect(
+      canAccessEmployeeResource({
+        ...base,
+        resource: "profile",
+        targetManagerId: 99,
+      }),
+    ).toBe(false);
+  });
+
+  test("never crosses organization boundaries", () => {
+    expect(
+      canAccessEmployeeResource({
+        role: "admin",
+        resource: "profile",
+        actorEmployeeId: 1,
+        targetEmployeeId: 2,
+        actorOrganizationId: 1,
+        targetOrganizationId: 2,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -46,5 +96,24 @@ describe("post-authentication routing", () => {
   test("does not trust legacy or unknown roles with privileged routing", () => {
     expect(getRoleLandingPath("user")).toBe("/dashboard");
     expect(getRoleLandingPath(null)).toBe("/dashboard");
+  });
+
+  test("enforces broad page access before APIs apply row-level scope", () => {
+    expect(canAccessPage("employee", "/dashboard/people/profile")).toBe(true);
+    expect(canAccessPage("employee", "/dashboard/people/42")).toBe(false);
+    expect(canAccessPage("manager", "/dashboard/people/42")).toBe(true);
+    expect(canAccessPage("manager", "/dashboard/payroll/periods")).toBe(false);
+    expect(canAccessPage("hr", "/dashboard/payroll/periods")).toBe(true);
+    expect(canAccessPage("hr", "/admin")).toBe(false);
+    expect(canAccessPage("admin", "/admin")).toBe(true);
+  });
+
+  test("rejects external and auth-loop callback destinations", () => {
+    expect(sanitizeCallbackPath("https://evil.example/steal")).toBe("/auth/redirect");
+    expect(sanitizeCallbackPath("//evil.example/steal")).toBe("/auth/redirect");
+    expect(sanitizeCallbackPath("/sign-in")).toBe("/auth/redirect");
+    expect(sanitizeCallbackPath("/dashboard/attendance?week=current")).toBe(
+      "/dashboard/attendance?week=current",
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, getPaginatedData } from "@/lib/api/client";
 import type { Organization } from "@/db/schema/organizations";
 import type { Department } from "@/db/schema/departments";
 import type { Designation } from "@/db/schema/designations";
@@ -14,7 +14,8 @@ export const orgKeys = {
   designations: () => [...orgKeys.all, "designations"] as const,
   locations: () => [...orgKeys.all, "locations"] as const,
   holidays: () => [...orgKeys.all, "holidays"] as const,
-  workSchedules: () => [...orgKeys.all, "workSchedules"] as const,
+  workSchedules: (employeeId?: number) =>
+    [...orgKeys.all, "workSchedules", employeeId] as const,
 };
 
 export function useOrganization() {
@@ -31,8 +32,10 @@ export function useDepartments() {
   return useQuery({
     queryKey: orgKeys.departments(),
     queryFn: async () => {
-      const res = await apiClient<Department[]>("/api/v1/departments");
-      return res.data ?? [];
+      const res = await apiClient<
+        Department[] | { items: Department[]; total: number }
+      >("/api/v1/departments");
+      return getPaginatedData(res).items;
     },
   });
 }
@@ -41,8 +44,10 @@ export function useDesignations() {
   return useQuery({
     queryKey: orgKeys.designations(),
     queryFn: async () => {
-      const res = await apiClient<Designation[]>("/api/v1/designations");
-      return res.data ?? [];
+      const res = await apiClient<
+        Designation[] | { items: Designation[]; total: number }
+      >("/api/v1/designations");
+      return getPaginatedData(res).items;
     },
   });
 }
@@ -51,8 +56,10 @@ export function useLocations() {
   return useQuery({
     queryKey: orgKeys.locations(),
     queryFn: async () => {
-      const res = await apiClient<Location[]>("/api/v1/locations");
-      return res.data ?? [];
+      const res = await apiClient<Location[] | { items: Location[]; total: number }>(
+        "/api/v1/locations"
+      );
+      return getPaginatedData(res).items;
     },
   });
 }
@@ -61,19 +68,28 @@ export function useHolidays() {
   return useQuery({
     queryKey: orgKeys.holidays(),
     queryFn: async () => {
-      const res = await apiClient<Holiday[]>("/api/v1/holidays");
-      return res.data ?? [];
+      const res = await apiClient<Holiday[] | { items: Holiday[]; total: number }>(
+        "/api/v1/holidays"
+      );
+      return getPaginatedData(res).items;
     },
   });
 }
 
-export function useWorkSchedules() {
+export function useWorkSchedules(
+  employeeId?: number,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
-    queryKey: orgKeys.workSchedules(),
+    queryKey: orgKeys.workSchedules(employeeId),
     queryFn: async () => {
-      const res = await apiClient<WorkSchedule[]>("/api/v1/work-schedules");
-      return res.data ?? [];
+      const query = employeeId ? `?employeeId=${employeeId}` : "";
+      const res = await apiClient<
+        WorkSchedule[] | { items: WorkSchedule[]; total: number }
+      >(`/api/v1/work-schedules${query}`);
+      return getPaginatedData(res).items;
     },
+    enabled: options?.enabled,
   });
 }
 

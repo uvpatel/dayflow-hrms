@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
+import { dashboardKeys, reportKeys } from "@/lib/query-keys";
+
+export { dashboardKeys, reportKeys } from "@/lib/query-keys";
 
 export interface DashboardReportData {
   totalEmployees: number;
@@ -27,22 +30,15 @@ export interface PayrollReportData {
   costByDepartment: { department: string; totalPay: number }[];
 }
 
-export const reportKeys = {
-  all: ["reports"] as const,
-  dashboard: () => [...reportKeys.all, "dashboard"] as const,
-  attendance: (range?: string) => [...reportKeys.all, "attendance", range] as const,
-  leave: (range?: string) => [...reportKeys.all, "leave", range] as const,
-  payroll: (range?: string) => [...reportKeys.all, "payroll", range] as const,
-};
-
-export function useDashboardReports() {
+export function useDashboardReports(role?: string, enabled = true) {
   return useQuery({
-    queryKey: reportKeys.dashboard(),
+    queryKey: dashboardKeys.byRole(role),
     queryFn: async () => {
       const res = await apiClient<DashboardReportData>("/api/v1/reports/dashboard");
       return res.data;
     },
     staleTime: 1000 * 60, // 1 min
+    enabled,
   });
 }
 

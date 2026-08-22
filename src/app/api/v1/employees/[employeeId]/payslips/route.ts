@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { payslips, employees } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import {
   errorResponse,
   successResponse,
@@ -32,6 +32,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const records = await db
       .select()
       .from(payslips)
+      .where(and(
+        eq(payslips.employeeId, employeeId),
+        ...(authContext.organizationId
+          ? [eq(payslips.organizationId, authContext.organizationId)]
+          : []),
+      ))
       .orderBy(desc(payslips.createdAt))
       .limit(50);
 

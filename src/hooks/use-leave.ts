@@ -1,39 +1,64 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, getPaginatedData } from "@/lib/api/client";
 import type { LeaveRequest } from "@/db/schema/leave-requests";
 import type { LeaveType } from "@/db/schema/leave-types";
 import type { LeaveAllocation } from "@/db/schema/leave-allocations";
+import {
+  approvalKeys,
+  attendanceKeys,
+  dashboardKeys,
+  leaveKeys,
+  notificationKeys,
+} from "@/lib/query-keys";
+
+export { leaveKeys } from "@/lib/query-keys";
 
 export interface LeaveRequestFilterParams {
+  page?: number;
   limit?: number;
   offset?: number;
   employeeId?: number;
   status?: string;
 }
 
-export const leaveKeys = {
-  all: ["leave"] as const,
-  requests: (params?: LeaveRequestFilterParams) => [...leaveKeys.all, "requests", params] as const,
-  myRequests: () => [...leaveKeys.all, "me", "requests"] as const,
-  types: () => [...leaveKeys.all, "types"] as const,
-  allocations: (employeeId?: number) => [...leaveKeys.all, "allocations", employeeId] as const,
-};
+export interface MyTimeOffData {
+  allocations: LeaveAllocation[];
+  requests: LeaveRequest[];
+}
+
+export function useMyTimeOff() {
+  return useQuery({
+    queryKey: leaveKeys.mine(),
+    queryFn: async () => {
+      const res = await apiClient<MyTimeOffData | LeaveRequest[]>(
+        "/api/v1/me/time-off"
+      );
+      if (Array.isArray(res.data)) {
+        return { allocations: [], requests: res.data };
+      }
+      return res.data ?? { allocations: [], requests: [] };
+    },
+  });
+}
 
 export function useLeaveRequests(params?: LeaveRequestFilterParams) {
   return useQuery({
     queryKey: leaveKeys.requests(params),
     queryFn: async () => {
       const searchParams = new URLSearchParams();
+      if (params?.page) searchParams.set("page", params.page.toString());
       if (params?.limit) searchParams.set("limit", params.limit.toString());
       if (params?.offset) searchParams.set("offset", params.offset.toString());
       if (params?.employeeId) searchParams.set("employeeId", params.employeeId.toString());
       if (params?.status) searchParams.set("status", params.status);
 
       const qs = searchParams.toString();
-      const res = await apiClient<{ items: LeaveRequest[]; total: number }>(
+      const res = await apiClient<
+        LeaveRequest[] | { items: LeaveRequest[]; total: number }
+      >(
         `/api/v1/leave-requests${qs ? `?${qs}` : ""}`
       );
-      return res.data ?? { items: [], total: 0 };
+      return getPaginatedData(res);
     },
   });
 }
@@ -42,8 +67,10 @@ export function useMyLeaveRequests() {
   return useQuery({
     queryKey: leaveKeys.myRequests(),
     queryFn: async () => {
-      const res = await apiClient<LeaveRequest[]>("/api/v1/me/time-off");
-      return res.data ?? [];
+      const res = await apiClient<MyTimeOffData | LeaveRequest[]>(
+        "/api/v1/me/time-off"
+      );
+      return Array.isArray(res.data) ? res.data : res.data?.requests ?? [];
     },
   });
 }
@@ -60,7 +87,7 @@ export function useLeaveTypes() {
 
 export function useLeaveAllocations(employeeId?: number) {
   return useQuery({
-    queryKey: leaveKeys.allocations(employeeId),
+    queryKey: leaveKeys.balances(employeeId),
     queryFn: async () => {
       const qs = employeeId ? `?employeeId=${employeeId}` : "";
       const res = await apiClient<LeaveAllocation[]>(`/api/v1/leave-allocations${qs}`);
@@ -85,8 +112,13 @@ export function useSubmitLeaveRequest() {
       });
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: leaveKeys.all }),
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: notificationKeys.all }),
+      ]);
     },
   });
 }
@@ -100,8 +132,14 @@ export function useApproveLeaveRequest() {
       });
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: leaveKeys.all }),
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: notificationKeys.all }),
+      ]);
     },
   });
 }
@@ -116,8 +154,14 @@ export function useRejectLeaveRequest() {
       });
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.all });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: leaveKeys.all }),
+        queryClient.invalidateQueries({ queryKey: approvalKeys.all }),
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: notificationKeys.all }),
+      ]);
     },
   });
 }

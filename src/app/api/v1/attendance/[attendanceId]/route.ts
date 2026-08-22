@@ -26,10 +26,11 @@ type RouteParams = {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "attendance:read:any");
-
     const { attendanceId } = await validateParams(params, attendanceIdParamSchema);
-    const record = await attendanceService.getAttendance(attendanceId);
+    const record = await attendanceService.getAttendanceForActor(
+      authContext,
+      attendanceId,
+    );
 
     return successResponse(record, undefined, `Attendance ${attendanceId} fetched successfully`);
   } catch (error) {
@@ -43,6 +44,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "attendance:manage");
 
     const { attendanceId } = await validateParams(params, attendanceIdParamSchema);
+    await attendanceService.getAttendanceForActor(authContext, attendanceId);
     const data = await validateBody(request, updateAttendanceSchema);
     const updated = await attendanceService.updateAttendance(attendanceId, data);
 
@@ -58,6 +60,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "attendance:manage");
 
     const { attendanceId } = await validateParams(params, attendanceIdParamSchema);
+    await attendanceService.getAttendanceForActor(authContext, attendanceId);
     const deleted = await attendanceService.deleteAttendance(attendanceId);
 
     return successResponse(deleted, undefined, `Attendance ${attendanceId} deleted successfully`);

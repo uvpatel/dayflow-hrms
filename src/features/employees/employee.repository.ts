@@ -5,7 +5,7 @@ import {
   emergencyContacts,
   employeeDocuments,
 } from "@/db/schema";
-import { count, desc, eq, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, type SQL } from "drizzle-orm";
 import {
   NewEmployee,
   NewEmployeeAddress,
@@ -15,15 +15,46 @@ import {
 } from "./employee.types";
 
 export class EmployeeRepository {
-  async findEmployees(limit = 20, offset = 0, search?: string) {
-    const where = search
-      ? or(
+  async findEmployees(
+    limit = 20,
+    offset = 0,
+    search?: string,
+    scope?: {
+      organizationId?: number | null;
+      managerId?: number;
+      employeeIds?: number[];
+      departmentId?: number;
+      status?: string;
+    },
+  ) {
+    const conditions: SQL[] = [];
+    if (search) {
+      conditions.push(or(
           ilike(employees.firstName, `%${search}%`),
           ilike(employees.lastName, `%${search}%`),
           ilike(employees.email, `%${search}%`),
-          ilike(employees.phoneNumber, `%${search}%`)
-        )
-      : undefined;
+          ilike(employees.phoneNumber, `%${search}%`),
+          ilike(employees.employeeNumber, `%${search}%`),
+        )!);
+    }
+    if (scope?.organizationId) {
+      conditions.push(eq(employees.organizationId, scope.organizationId));
+    }
+    if (scope?.managerId) {
+      conditions.push(eq(employees.managerId, scope.managerId));
+    }
+    if (scope?.employeeIds) {
+      if (scope.employeeIds.length === 0) return [];
+      conditions.push(inArray(employees.id, scope.employeeIds));
+    }
+    if (scope?.departmentId) {
+      conditions.push(eq(employees.departmentId, scope.departmentId));
+    }
+    if (scope?.status) {
+      conditions.push(eq(employees.employmentStatus, scope.status));
+    }
+
+    const where = conditions.length ? and(...conditions) : undefined;
 
     return await db
       .select()
@@ -34,15 +65,36 @@ export class EmployeeRepository {
       .offset(offset);
   }
 
-  async countEmployees(search?: string): Promise<number> {
-    const where = search
-      ? or(
+  async countEmployees(
+    search?: string,
+    scope?: {
+      organizationId?: number | null;
+      managerId?: number;
+      employeeIds?: number[];
+      departmentId?: number;
+      status?: string;
+    },
+  ): Promise<number> {
+    const conditions: SQL[] = [];
+    if (search) {
+      conditions.push(or(
           ilike(employees.firstName, `%${search}%`),
           ilike(employees.lastName, `%${search}%`),
           ilike(employees.email, `%${search}%`),
-          ilike(employees.phoneNumber, `%${search}%`)
-        )
-      : undefined;
+          ilike(employees.phoneNumber, `%${search}%`),
+          ilike(employees.employeeNumber, `%${search}%`),
+        )!);
+    }
+    if (scope?.organizationId) conditions.push(eq(employees.organizationId, scope.organizationId));
+    if (scope?.managerId) conditions.push(eq(employees.managerId, scope.managerId));
+    if (scope?.employeeIds) {
+      if (scope.employeeIds.length === 0) return 0;
+      conditions.push(inArray(employees.id, scope.employeeIds));
+    }
+    if (scope?.departmentId) conditions.push(eq(employees.departmentId, scope.departmentId));
+    if (scope?.status) conditions.push(eq(employees.employmentStatus, scope.status));
+
+    const where = conditions.length ? and(...conditions) : undefined;
 
     const [res] = await db.select({ total: count() }).from(employees).where(where);
     return res?.total ?? 0;
@@ -56,6 +108,39 @@ export class EmployeeRepository {
   async findEmployeeByEmail(email: string) {
     const [employee] = await db.select().from(employees).where(eq(employees.email, email));
     return employee ?? null;
+  }
+
+  async findEmployeeByUserId(userId: string) {
+    const [employee] = await db
+      .select()
+      .from(employees)
+      .where(eq(employees.userId, userId))
+      .limit(1);
+    return employee ?? null;
+  }
+
+  async findDirectReports(managerId: number, organizationId?: number | null) {
+    const conditions = [eq(employees.managerId, managerId)];
+    if (organizationId) conditions.push(eq(employees.organizationId, organizationId));
+    return db
+      .select()
+      .from(employees)
+      .where(and(...conditions))
+      .orderBy(employees.firstName, employees.lastName);
+  }
+
+  async getManagerAncestorIds(employeeId: number): Promise<number[]> {
+    const ancestors: number[] = [];
+    const visited = new Set<number>();
+    let current = await this.findEmployeeById(employeeId);
+
+    while (current?.managerId && !visited.has(current.managerId)) {
+      visited.add(current.managerId);
+      ancestors.push(current.managerId);
+      current = await this.findEmployeeById(current.managerId);
+    }
+
+    return ancestors;
   }
 
   async findEmployeeWithRelations(id: number): Promise<FullEmployeeProfile | null> {

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Building2,
   Briefcase,
@@ -9,7 +10,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Users,
   Building,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -18,7 +18,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +29,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -59,7 +65,13 @@ import {
 } from "@/hooks/use-organization";
 
 export default function OrganizationPage() {
-  const [activeTab, setActiveTab] = useState("departments");
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(() =>
+    requestedTab && ["departments", "designations", "locations", "holidays"].includes(requestedTab)
+      ? requestedTab
+      : "departments"
+  );
   const [searchQuery, setSearchQuery] = useState("");
 
   // Dialog open states
@@ -331,6 +343,26 @@ export default function OrganizationPage() {
                           onChange={(e) => setDesigName(e.target.value)}
                           required
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="desDepartment">Department</Label>
+                        <Select
+                          value={desigDeptId?.toString()}
+                          onValueChange={(value) =>
+                            setDesigDeptId(value ? Number(value) : undefined)
+                          }
+                        >
+                          <SelectTrigger id="desDepartment">
+                            <SelectValue placeholder="Organization-wide" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {departments.map((department) => (
+                              <SelectItem key={department.id} value={department.id.toString()}>
+                                {department.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                     <DialogFooter>

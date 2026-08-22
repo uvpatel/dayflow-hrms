@@ -1,5 +1,10 @@
 import { timeOffRepository } from "./time-off.repository";
-import { NotFoundError, ConflictError, BusinessRuleError } from "@/lib/api/errors";
+import {
+  AuthorizationError,
+  NotFoundError,
+  ConflictError,
+  BusinessRuleError,
+} from "@/lib/api/errors";
 import { logActivity } from "@/lib/audit/logger";
 import { sendNotification } from "@/lib/notifications/service";
 import { AuthContext } from "@/lib/auth/session";
@@ -14,6 +19,14 @@ import {
   createLeaveRequestSchema,
   updateLeaveRequestSchema,
 } from "./time-off.schemas";
+import { employeeRepository } from "@/features/employees/employee.repository";
+import {
+  assertPendingCancellation,
+  assertRejectComment,
+  calculateRequestedDays,
+  canDecideLeaveRequest,
+  canReadLeaveRequest,
+} from "./time-off.domain";
 
 export class TimeOffService {
   // Leave Types
@@ -108,7 +121,11 @@ export class TimeOffService {
   }
 
   async createAllocation(data: z.infer<typeof createLeaveAllocationSchema>) {
-    const created = await timeOffRepository.createAllocation(data);
+    const created = await timeOffRepository.createAllocation({
+      ...data,
+      allocatedDays: data.allocatedDays.toFixed(2),
+      usedDays: data.usedDays.toFixed(2),
+    });
     await logActivity({
       action: "LEAVE_ALLOCATION_CREATED",
       description: `Allocated ${created.allocatedDays} days of ${created.leaveType} to employee #${created.employeeId}`,
@@ -118,7 +135,10 @@ export class TimeOffService {
 
   async updateAllocation(id: number, data: z.infer<typeof updateLeaveAllocationSchema>) {
     await this.getAllocation(id);
-    const updated = await timeOffRepository.updateAllocation(id, data);
+    const updated = await timeOffRepository.updateAllocation(id, {
+      ...(data.allocatedDays !== undefined && { allocatedDays: data.allocatedDays.toFixed(2) }),
+      ...(data.usedDays !== undefined && { usedDays: data.usedDays.toFixed(2) }),
+    });
     await logActivity({
       action: "LEAVE_ALLOCATION_UPDATED",
       description: `Updated leave allocation #${id}`,
@@ -177,8 +197,7 @@ export class TimeOffService {
     }
 
     // Calculate requested duration in days
-    const diffTime = Math.abs(data.endDate.getTime() - data.startDate.getTime());
-    const requestedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const requestedDays = calculateRequestedDays(data.startDate, data.endDate, data.unit);
 
     // Check allocation balance if allocation exists
     const allocation = await timeOffRepository.findAllocationByEmployeeAndType(
@@ -186,7 +205,7 @@ export class TimeOffService {
       data.leaveType
     );
     if (allocation) {
-      const remainingDays = allocation.allocatedDays - allocation.usedDays;
+      const remainingDays = Number(allocation.allocatedDays) - Number(allocation.usedDays);
       if (remainingDays < requestedDays) {
         throw new BusinessRuleError(
           `Insufficient leave balance. You have ${remainingDays} days remaining for ${data.leaveType}, but requested ${requestedDays} days.`,
@@ -200,6 +219,8 @@ export class TimeOffService {
       leaveType: data.leaveType,
       startDate: data.startDate,
       endDate: data.endDate,
+      days: requestedDays.toFixed(2),
+      unit: data.unit,
       reason: data.reason ?? null,
       status: "pending",
     });
@@ -235,10 +256,9 @@ export class TimeOffService {
       request.leaveType
     );
     if (allocation) {
-      const diffTime = Math.abs(request.endDate.getTime() - request.startDate.getTime());
-      const requestedDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      const requestedDays = Number(request.days);
       await timeOffRepository.updateAllocation(allocation.id, {
-        usedDays: allocation.usedDays + requestedDays,
+        usedDays: (Number(allocation.usedDays) + requestedDays).toFixed(2),
       });
     }
 

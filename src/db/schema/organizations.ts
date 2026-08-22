@@ -6,6 +6,7 @@ export const organizations = pgTable("organizations", {
   name: text("name").notNull(),
   slug: text("slug"),
   description: text("description"),
+  timezone: text("timezone").default("UTC").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -15,6 +16,7 @@ export const organizationSchema = z.object({
   name: z.string(),
   slug: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
+  timezone: z.string().optional(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
 });

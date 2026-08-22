@@ -6,7 +6,6 @@ import {
   DollarSign,
   Calendar,
   Layers,
-  Search,
   Plus,
   RefreshCw,
   Lock,
@@ -60,7 +59,6 @@ import {
 
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState("periods");
-  const [searchQuery, setSearchQuery] = useState("");
 
   // New Period Form State
   const [isPeriodDialogOpen, setIsPeriodDialogOpen] = useState(false);
@@ -71,7 +69,7 @@ export default function PayrollPage() {
   // TanStack Query Hooks
   const { data: periodsData, isLoading: periodsLoading, refetch: refetchPeriods } = usePayrollPeriods({ limit: 50 });
   const { data: structuresData, isLoading: structuresLoading, refetch: refetchStructures } = useSalaryStructures();
-  const { data: payslipsData, isLoading: payslipsLoading, refetch: refetchPayslips } = usePayslips({ limit: 50, search: searchQuery });
+  const { data: payslipsData, refetch: refetchPayslips } = usePayslips({ limit: 50 });
 
   const createPeriodMutation = useCreatePeriod();
   const calculatePayrollMutation = useCalculatePayroll();

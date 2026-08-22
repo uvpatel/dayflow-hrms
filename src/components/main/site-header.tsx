@@ -14,14 +14,16 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { ModeToggle } from "@/components/toggler";
-import { Bell, Search, Home } from "lucide-react";
+import { Bell, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNotifications } from "@/hooks/use-notifications";
 
 const ROUTE_LABELS: Record<string, string> = {
   dashboard: "Dashboard",
   people: "People",
   onboarding: "Onboarding",
   profile: "Profile",
+  "my-team": "My Team",
   personal: "Personal Details",
   job: "Job & Position",
   attendance: "Attendance",
@@ -44,6 +46,8 @@ const ROUTE_LABELS: Record<string, string> = {
   departments: "Departments",
   designations: "Designations",
   locations: "Locations",
+  "office-locations": "Office Locations",
+  "work-schedules": "Work Schedules",
   holidays: "Company Holidays",
   reports: "Reports",
   settings: "Settings",
@@ -66,6 +70,8 @@ function formatSegmentLabel(segment: string): string {
 export function SiteHeader({ title }: { title?: string }) {
   const pathname = usePathname() || "/dashboard";
   const segments = pathname.split("/").filter(Boolean);
+  const { data: notifications = [] } = useNotifications();
+  const unreadCount = notifications.filter((notification) => notification.read === 0).length;
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b bg-background/95 backdrop-blur px-4 lg:px-6 z-10 transition-[width,height] ease-linear">
@@ -112,26 +118,18 @@ export function SiteHeader({ title }: { title?: string }) {
       {/* Right: Quick actions, Notifications, Dark mode */}
       <div className="flex items-center gap-2">
         <Button
-          variant="outline"
-          size="sm"
-          className="hidden md:flex items-center gap-2 text-xs text-muted-foreground h-8 px-3"
-          onClick={() => {}}
-        >
-          <Search className="size-3.5" />
-          <span>Quick search...</span>
-          <kbd className="pointer-events-none inline-flex h-4 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-            ⌘K
-          </kbd>
-        </Button>
-
-        <Button
           variant="ghost"
           size="icon"
           className="size-8 text-muted-foreground hover:text-foreground relative"
           aria-label="Notifications"
+          render={<Link href="/dashboard/notifications" />}
         >
           <Bell className="size-4" />
-          <span className="absolute top-1.5 right-1.5 size-2 bg-primary rounded-full ring-2 ring-background" />
+          {unreadCount > 0 ? (
+            <span className="absolute right-1 top-1 flex min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3.5 text-primary-foreground ring-2 ring-background">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          ) : null}
         </Button>
 
         <ModeToggle />

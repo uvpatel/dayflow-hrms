@@ -18,6 +18,10 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import {
+  createAbsoluteCallbackURL,
+  sanitizeCallbackPath,
+} from "@/lib/auth/redirects";
 import { Loader2Icon, Eye, EyeOff } from "lucide-react";
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -39,9 +43,15 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export function LoginForm({
   className,
+  callbackURL = "/auth/redirect",
+  githubEnabled = false,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & {
+  callbackURL?: string;
+  githubEnabled?: boolean;
+}) {
   const router = useRouter();
+  const safeCallbackURL = sanitizeCallbackPath(callbackURL);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -83,14 +93,22 @@ export function LoginForm({
       const res = await authClient.signIn.email({
         email: email.trim(),
         password,
+        callbackURL: createAbsoluteCallbackURL(
+          safeCallbackURL,
+          window.location.origin,
+        ),
       });
 
       if (res.error) {
+        if (res.error.code === "EMAIL_NOT_VERIFIED") {
+          router.replace(`/verify-email?email=${encodeURIComponent(email.trim())}`);
+          return;
+        }
         setFormError(
           res.error.message || "Invalid email or password. Please try again."
         );
       } else {
-        router.replace("/auth/redirect");
+        router.replace(safeCallbackURL);
         router.refresh();
       }
     } catch (err: unknown) {
@@ -110,7 +128,11 @@ export function LoginForm({
     try {
       const res = await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/auth/redirect",
+        callbackURL: createAbsoluteCallbackURL(
+          safeCallbackURL,
+          window.location.origin,
+        ),
+        errorCallbackURL: `${window.location.origin}/sign-in?error=oauth`,
       });
 
       if (res?.error) {
@@ -141,7 +163,7 @@ export function LoginForm({
               <div className="flex flex-col items-center gap-2 text-center">
                 <h1 className="text-2xl font-bold">Welcome back</h1>
                 <p className="text-balance text-muted-foreground">
-                  Login to your Acme Inc account
+                  Sign in to your Dayflow account
                 </p>
               </div>
 
@@ -179,12 +201,9 @@ export function LoginForm({
               <Field>
                 <div className="flex items-center">
                   <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <a
-                    href="#"
-                    className="ml-auto text-sm underline-offset-2 hover:underline"
-                  >
-                    Forgot your password?
-                  </a>
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    Contact HR to reset access
+                  </span>
                 </div>
                 <div className="relative">
                   <Input
@@ -242,31 +261,35 @@ export function LoginForm({
                 </Button>
               </Field>
 
-              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-                Or continue with
-              </FieldSeparator>
+              {githubEnabled && (
+                <>
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+                    Or continue with
+                  </FieldSeparator>
 
-              <Field>
-                <Button
-                  variant="outline"
-                  type="button"
-                  className="w-full"
-                  disabled={isSubmitting}
-                  onClick={handleGithubSignIn}
-                >
-                  {isGithubLoading ? (
-                    <>
-                      <Loader2Icon className="mr-2 size-4 animate-spin" />
-                      Connecting to GitHub...
-                    </>
-                  ) : (
-                    <>
-                      <GithubIcon className="mr-2 size-4" />
-                      Continue with GitHub
-                    </>
-                  )}
-                </Button>
-              </Field>
+                  <Field>
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="w-full"
+                      disabled={isSubmitting}
+                      onClick={handleGithubSignIn}
+                    >
+                      {isGithubLoading ? (
+                        <>
+                          <Loader2Icon className="mr-2 size-4 animate-spin" />
+                          Connecting to GitHub...
+                        </>
+                      ) : (
+                        <>
+                          <GithubIcon className="mr-2 size-4" />
+                          Continue with GitHub
+                        </>
+                      )}
+                    </Button>
+                  </Field>
+                </>
+              )}
 
               <FieldDescription className="text-center">
                 Don&apos;t have an account?{" "}

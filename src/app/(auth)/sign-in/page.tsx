@@ -2,20 +2,35 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
+import { sanitizeCallbackPath } from "@/lib/auth/redirects";
 
-export default async function SignInPage() {
+type SignInPageProps = {
+  searchParams: Promise<{ callbackURL?: string | string[] }>;
+};
+
+export default async function SignInPage({ searchParams }: SignInPageProps) {
+  const params = await searchParams;
+  const requestedCallback = Array.isArray(params.callbackURL)
+    ? params.callbackURL[0]
+    : params.callbackURL;
+  const callbackURL = sanitizeCallbackPath(requestedCallback);
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
   if (session) {
-    redirect("/auth/redirect");
+    redirect(callbackURL);
   }
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
       <div className="w-full max-w-sm md:max-w-4xl">
-        <LoginForm />
+        <LoginForm
+          callbackURL={callbackURL}
+          githubEnabled={Boolean(
+            process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET,
+          )}
+        />
       </div>
     </div>
   );

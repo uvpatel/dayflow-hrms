@@ -14,14 +14,11 @@ import { getAuthContext, requirePermission } from "@/lib/auth/session";
 export async function GET(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "attendance:read:any");
-
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination(searchParams, 50, 100);
-    const userId = searchParams.get("userId") || undefined;
 
-    const { items, total } = await attendanceService.listCorrections(limit, offset, userId);
-    const meta = buildPaginationMeta(page, limit, total, { userId });
+    const { items, total } = await attendanceService.listCorrectionsForActor(authContext, limit, offset);
+    const meta = buildPaginationMeta(page, limit, total);
 
     return paginatedResponse(items, meta, "Attendance corrections fetched successfully");
   } catch (error) {

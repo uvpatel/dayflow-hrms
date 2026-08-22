@@ -42,6 +42,7 @@ export const createLeaveRequestSchema = z.object({
     .or(z.date())
     .transform((val) => new Date(val)),
   reason: z.string().optional(),
+  unit: z.enum(["full_day", "half_day"]).default("full_day"),
 });
 
 export const updateLeaveRequestSchema = z.object({

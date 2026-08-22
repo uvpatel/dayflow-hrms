@@ -1,16 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, getPaginatedData } from "@/lib/api/client";
 import type { PayrollPeriod } from "@/db/schema/payroll-periods";
 import type { Payslip } from "@/db/schema/payslips";
 import type { SalaryStructure } from "@/db/schema/salary-structures";
+import { payrollKeys } from "@/lib/query-keys";
 
-export const payrollKeys = {
-  all: ["payroll"] as const,
-  periods: (params?: { limit?: number; offset?: number }) => [...payrollKeys.all, "periods", params] as const,
-  structures: () => [...payrollKeys.all, "structures"] as const,
-  payslips: (params?: { limit?: number; offset?: number; search?: string }) => [...payrollKeys.all, "payslips", params] as const,
-  myPayslips: () => [...payrollKeys.all, "me", "payslips"] as const,
-};
+export { payrollKeys } from "@/lib/query-keys";
 
 export function usePayrollPeriods(params?: { limit?: number; offset?: number }) {
   return useQuery({
@@ -21,10 +16,12 @@ export function usePayrollPeriods(params?: { limit?: number; offset?: number }) 
       if (params?.offset) searchParams.set("offset", params.offset.toString());
 
       const qs = searchParams.toString();
-      const res = await apiClient<{ items: PayrollPeriod[]; total: number }>(
+      const res = await apiClient<
+        PayrollPeriod[] | { items: PayrollPeriod[]; total: number }
+      >(
         `/api/v1/payroll/periods${qs ? `?${qs}` : ""}`
       );
-      return res.data ?? { items: [], total: 0 };
+      return getPaginatedData(res);
     },
   });
 }
@@ -33,8 +30,10 @@ export function useSalaryStructures() {
   return useQuery({
     queryKey: payrollKeys.structures(),
     queryFn: async () => {
-      const res = await apiClient<SalaryStructure[]>("/api/v1/salary-structures");
-      return res.data ?? [];
+      const res = await apiClient<
+        SalaryStructure[] | { items: SalaryStructure[]; total: number }
+      >("/api/v1/salary-structures");
+      return getPaginatedData(res).items;
     },
   });
 }
@@ -49,10 +48,10 @@ export function usePayslips(params?: { limit?: number; offset?: number; search?:
       if (params?.search) searchParams.set("search", params.search);
 
       const qs = searchParams.toString();
-      const res = await apiClient<{ items: Payslip[]; total: number }>(
+      const res = await apiClient<Payslip[] | { items: Payslip[]; total: number }>(
         `/api/v1/payroll/payslips${qs ? `?${qs}` : ""}`
       );
-      return res.data ?? { items: [], total: 0 };
+      return getPaginatedData(res);
     },
   });
 }

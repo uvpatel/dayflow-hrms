@@ -42,6 +42,7 @@ async function main() {
         name: "Dayflow Technologies",
         slug: "dayflow",
         description: "Enterprise HRMS Cloud Solutions",
+        timezone: "America/Los_Angeles",
       })
       .returning();
   }
@@ -131,6 +132,7 @@ async function main() {
     // Managers
     { userId: "usr_mgr_01", email: "manager1@dayflow.dev", name: "Elena Rostova", role: "manager" as const, empNo: "EMP-1004", deptIdx: 0, desigIdx: 0, locIdx: 0 },
     { userId: "usr_mgr_02", email: "manager2@dayflow.dev", name: "David Miller", role: "manager" as const, empNo: "EMP-1005", deptIdx: 1, desigIdx: 4, locIdx: 1 },
+    { userId: "usr_mgr_03", email: "manager3@dayflow.dev", name: "Priya Raman", role: "manager" as const, empNo: "EMP-1021", deptIdx: 3, desigIdx: 7, locIdx: 0 },
     // Employees (15 staff)
     { userId: "usr_emp_01", email: "emp1@dayflow.dev", name: "James Wilson", role: "employee" as const, empNo: "EMP-1006", deptIdx: 0, desigIdx: 1, locIdx: 0 },
     { userId: "usr_emp_02", email: "emp2@dayflow.dev", name: "Olivia Martinez", role: "employee" as const, empNo: "EMP-1007", deptIdx: 0, desigIdx: 2, locIdx: 0 },
@@ -147,6 +149,11 @@ async function main() {
     { userId: "usr_emp_13", email: "emp13@dayflow.dev", name: "Henry Young", role: "employee" as const, empNo: "EMP-1018", deptIdx: 0, desigIdx: 2, locIdx: 1 },
     { userId: "usr_emp_14", email: "emp14@dayflow.dev", name: "Amelia King", role: "employee" as const, empNo: "EMP-1019", deptIdx: 2, desigIdx: 5, locIdx: 0 },
     { userId: "usr_emp_15", email: "emp15@dayflow.dev", name: "Daniel Scott", role: "employee" as const, empNo: "EMP-1020", deptIdx: 3, desigIdx: 7, locIdx: 1 },
+    { userId: "usr_emp_16", email: "emp16@dayflow.dev", name: "Grace Evans", role: "employee" as const, empNo: "EMP-1022", deptIdx: 0, desigIdx: 1, locIdx: 0 },
+    { userId: "usr_emp_17", email: "emp17@dayflow.dev", name: "Mason Turner", role: "employee" as const, empNo: "EMP-1023", deptIdx: 1, desigIdx: 3, locIdx: 1 },
+    { userId: "usr_emp_18", email: "emp18@dayflow.dev", name: "Zoe Campbell", role: "employee" as const, empNo: "EMP-1024", deptIdx: 4, desigIdx: 8, locIdx: 0 },
+    { userId: "usr_emp_19", email: "emp19@dayflow.dev", name: "Arjun Mehta", role: "employee" as const, empNo: "EMP-1025", deptIdx: 0, desigIdx: 2, locIdx: 1 },
+    { userId: "usr_emp_20", email: "emp20@dayflow.dev", name: "Lily Parker", role: "employee" as const, empNo: "EMP-1026", deptIdx: 3, desigIdx: 7, locIdx: 0 },
   ];
 
   const seededEmployees: { id: number; userId: string; role: string }[] = [];
@@ -166,14 +173,30 @@ async function main() {
         })
         .returning();
 
-      // Create password account
+    }
+
+    const [credentialAccount] = await db
+      .select()
+      .from(account)
+      .where(eq(account.id, `acc_${u.userId}`))
+      .limit(1);
+    if (!credentialAccount) {
       await db.insert(account).values({
         id: `acc_${u.userId}`,
         userId: authUser.id,
-        accountId: u.email,
+        accountId: authUser.id,
         providerId: "credential",
+        issuer: "local:credential",
         password: devPassword,
       });
+    } else if (
+      credentialAccount.issuer !== "local:credential" ||
+      credentialAccount.accountId !== authUser.id
+    ) {
+      await db
+        .update(account)
+        .set({ issuer: "local:credential", accountId: authUser.id, password: devPassword })
+        .where(eq(account.id, credentialAccount.id));
     }
 
     // Upsert Employee Record
@@ -203,17 +226,36 @@ async function main() {
     seededEmployees.push({ id: empRecord.id, userId: authUser.id, role: u.role });
   }
 
+  // Assign every regular employee to one of the three real managers.
+  const managerEmployees = seededEmployees.filter((employee) => employee.role === "manager");
+  const regularEmployees = seededEmployees.filter((employee) => employee.role === "employee");
+  for (const [index, employee] of regularEmployees.entries()) {
+    const manager = managerEmployees[index % managerEmployees.length];
+    await db
+      .update(employees)
+      .set({ managerId: manager.id, updatedAt: new Date() })
+      .where(eq(employees.id, employee.id));
+  }
+
   // 7. Work Schedules
   console.log("⏰ Seeding work schedules for employees...");
-  for (const emp of seededEmployees.slice(0, 5)) {
-    const [existing] = await db.select().from(workSchedules).where(eq(workSchedules.employeeId, emp.id)).limit(1);
-    if (!existing) {
-      await db.insert(workSchedules).values({
+  for (const emp of seededEmployees) {
+    let [schedule] = await db.select().from(workSchedules).where(eq(workSchedules.employeeId, emp.id)).limit(1);
+    if (!schedule) {
+      [schedule] = await db.insert(workSchedules).values({
         employeeId: emp.id,
         scheduleName: "Standard 40h Shift",
         startDate: new Date("2024-01-15"),
-      });
+        timezone: emp.id % 2 === 0 ? "America/New_York" : "America/Los_Angeles",
+        shiftStartMinutes: 540,
+        shiftEndMinutes: 1020,
+        breakMinutes: 30,
+        fullDayMinutes: 450,
+        halfDayMinutes: 225,
+        graceMinutes: 10,
+      }).returning();
     }
+    await db.update(employees).set({ workScheduleId: schedule.id }).where(eq(employees.id, emp.id));
   }
 
   // 8. Leave Types & Allocations
@@ -246,8 +288,8 @@ async function main() {
         await db.insert(leaveAllocations).values({
           employeeId: emp.id,
           leaveType: lt.name,
-          allocatedDays: lt.defaultDays,
-          usedDays: Math.floor(Math.random() * 3),
+          allocatedDays: lt.defaultDays.toFixed(2),
+          usedDays: Math.min(lt.defaultDays, (emp.id + lt.name.length) % 3).toFixed(2),
         });
       }
     }
@@ -256,24 +298,32 @@ async function main() {
   // 9. Leave Requests
   console.log("📝 Seeding leave requests...");
   const sampleRequests = [
-    { empIdx: 5, type: "Paid Leave", days: 3, status: "approved" as const, reason: "Family vacation trip" },
-    { empIdx: 6, type: "Sick Leave", days: 1, status: "approved" as const, reason: "Dental procedure" },
-    { empIdx: 7, type: "Paid Leave", days: 2, status: "pending" as const, reason: "Attending friend wedding" },
-    { empIdx: 8, type: "Casual Leave", days: 1, status: "rejected" as const, reason: "Personal errand", rejection: "Team sprint delivery week" },
-    { empIdx: 9, type: "Paid Leave", days: 4, status: "pending" as const, reason: "Summer holiday break" },
+    { empIdx: 6, type: "Paid Leave", days: 3, status: "approved" as const, reason: "Family vacation trip" },
+    { empIdx: 7, type: "Sick Leave", days: 1, status: "approved" as const, reason: "Dental procedure" },
+    { empIdx: 8, type: "Paid Leave", days: 2, status: "pending" as const, reason: "Attending friend wedding" },
+    { empIdx: 9, type: "Casual Leave", days: 1, status: "rejected" as const, reason: "Personal errand", rejection: "Team sprint delivery week" },
+    { empIdx: 10, type: "Paid Leave", days: 4, status: "pending" as const, reason: "Summer holiday break" },
   ];
   for (const req of sampleRequests) {
     const emp = seededEmployees[req.empIdx];
     if (emp) {
       const startDate = new Date("2026-08-25");
       const endDate = new Date("2026-08-28");
+      const [existingRequest] = await db.select().from(leaveRequests).where(sql`
+        ${leaveRequests.employeeId} = ${emp.id}
+        AND ${leaveRequests.leaveType} = ${req.type}
+        AND ${leaveRequests.startDate} = ${startDate}
+        AND ${leaveRequests.reason} = ${req.reason}
+      `).limit(1);
+      if (existingRequest) continue;
       await db.insert(leaveRequests).values({
         employeeId: emp.id,
         organizationId: org.id,
         leaveType: req.type,
         startDate,
         endDate,
-        days: req.days,
+        days: req.days.toFixed(2),
+        unit: "full_day",
         reason: req.reason,
         status: req.status,
         rejectionReason: req.rejection ?? null,
@@ -296,19 +346,28 @@ async function main() {
 
     for (const emp of seededEmployees.slice(0, 10)) {
       const checkIn = new Date(targetDate);
-      checkIn.setMinutes(Math.floor(Math.random() * 25)); // 9:00 - 9:25 AM
+      checkIn.setMinutes((emp.id + i) % 25); // deterministic 9:00 - 9:24 AM
 
       const checkOut = new Date(targetDate);
-      checkOut.setHours(17, 30 + Math.floor(Math.random() * 30), 0, 0); // 5:30 - 6:00 PM
+      checkOut.setHours(17, 30 + ((emp.id + i) % 30), 0, 0);
+
+      const workDate = targetDate.toISOString().slice(0, 10);
+      const [existingAttendance] = await db.select().from(attendances).where(sql`
+        ${attendances.employeeId} = ${emp.id}
+        AND ${attendances.workDate} = ${workDate}
+      `).limit(1);
+      if (existingAttendance) continue;
 
       await db.insert(attendances).values({
         userId: emp.userId,
         employeeId: emp.id,
         organizationId: org.id,
+        workDate,
         date: targetDate,
         checkInTime: checkIn,
         checkOutTime: checkOut,
         workHours: "8.5",
+        workMinutes: 510,
         status: "present",
       });
     }
@@ -347,15 +406,25 @@ async function main() {
       })
       .returning();
 
-    for (const emp of seededEmployees) {
+  }
+
+  for (const emp of seededEmployees) {
+    const [existingPayslip] = await db.select().from(payslips).where(sql`
+      ${payslips.employeeId} = ${emp.id}
+      AND ${payslips.payrollPeriodId} = ${period.id}
+    `).limit(1);
+    if (!existingPayslip) {
       await db.insert(payslips).values({
         name: `Payslip - Aug 2026 (${emp.userId})`,
         description: "Monthly salary slip for August 2026",
         employeeId: emp.id,
         organizationId: org.id,
+        payrollPeriodId: period.id,
         month: "August",
         year: 2026,
         basicSalary: "7500.00",
+        grossSalary: "9200.00",
+        deductions: "350.00",
         netSalary: "8850.00",
         status: "draft",
       });
@@ -365,16 +434,28 @@ async function main() {
   // 12. Notifications & Audit Logs
   console.log("🔔 Seeding notifications & audit events...");
   for (const emp of seededEmployees.slice(0, 5)) {
-    await db.insert(notifications).values([
+    for (const notification of [
       { userId: emp.id, message: "Welcome to Dayflow HRMS! Complete your profile.", read: 1 },
       { userId: emp.id, message: "Company holiday: Independence Day on July 4th.", read: 0 },
-    ]);
+    ]) {
+      const [existingNotification] = await db.select().from(notifications).where(sql`
+        ${notifications.userId} = ${notification.userId}
+        AND ${notifications.message} = ${notification.message}
+      `).limit(1);
+      if (!existingNotification) await db.insert(notifications).values(notification);
+    }
   }
 
-  await db.insert(activityLogs).values([
+  for (const activity of [
     { action: "SYSTEM_INITIALIZED", description: "Dayflow HRMS seed data populated successfully." },
     { action: "ORGANIZATION_CONFIGURED", description: "Configured Dayflow Technologies organization profile." },
-  ]);
+  ]) {
+    const [existingActivity] = await db.select().from(activityLogs).where(sql`
+      ${activityLogs.action} = ${activity.action}
+      AND ${activityLogs.description} = ${activity.description}
+    `).limit(1);
+    if (!existingActivity) await db.insert(activityLogs).values(activity);
+  }
 
   console.log("\n✅ [SEED COMPLETE] Dayflow HRMS Database seeded successfully!");
   console.log("\n=================== DEVELOPMENT CREDENTIALS ===================");
@@ -385,9 +466,10 @@ async function main() {
   console.log("👔 HR Admin 2:   hr2@dayflow.dev         (Michael Chang)");
   console.log("💼 Manager 1:    manager1@dayflow.dev    (Elena Rostova)");
   console.log("💼 Manager 2:    manager2@dayflow.dev    (David Miller)");
+  console.log("💼 Manager 3:    manager3@dayflow.dev    (Priya Raman)");
   console.log("👨‍💻 Employee 1:   emp1@dayflow.dev        (James Wilson)");
   console.log("👩‍💻 Employee 2:   emp2@dayflow.dev        (Olivia Martinez)");
-  console.log("... and emp3@dayflow.dev through emp15@dayflow.dev");
+  console.log("... and emp3@dayflow.dev through emp20@dayflow.dev");
   console.log("===============================================================\n");
 }
 

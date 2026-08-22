@@ -6,6 +6,7 @@ import { getAuthContext } from "@/lib/auth-context";
 import { db } from "@/db";
 import { user, employees } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { isRole } from "@/lib/permissions";
 
 export async function setRole(formData: FormData) {
   const ctx = await getAuthContext(await headers());
@@ -14,11 +15,11 @@ export async function setRole(formData: FormData) {
     throw new Error("Unauthorized: Admin permission required");
   }
 
-  const id = formData.get("id") as string;
-  const role = formData.get("role") as string;
+  const id = formData.get("id");
+  const role = formData.get("role");
 
-  if (!id || !role) {
-    throw new Error("Missing id or role");
+  if (typeof id !== "string" || !id || !isRole(role)) {
+    throw new Error("A valid user ID and Dayflow role are required");
   }
 
   // Update auth user table
@@ -49,16 +50,16 @@ export async function removeRole(formData: FormData) {
     throw new Error("Unauthorized: Admin permission required");
   }
 
-  const id = formData.get("id") as string;
+  const id = formData.get("id");
 
-  if (!id) {
+  if (typeof id !== "string" || !id) {
     throw new Error("Missing id");
   }
 
   await db
     .update(user)
     .set({
-      role: "user",
+      role: "employee",
       updatedAt: new Date(),
     })
     .where(eq(user.id, id));

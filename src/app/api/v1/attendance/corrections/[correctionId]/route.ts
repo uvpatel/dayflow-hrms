@@ -26,10 +26,11 @@ type RouteParams = {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "attendance:read:any");
-
     const { correctionId } = await validateParams(params, correctionIdParamSchema);
-    const item = await attendanceService.getCorrection(correctionId);
+    const item = await attendanceService.getCorrectionForActor(
+      authContext,
+      correctionId,
+    );
 
     return successResponse(item, undefined, `Correction ${correctionId} fetched successfully`);
   } catch (error) {
@@ -43,6 +44,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "attendance:manage");
 
     const { correctionId } = await validateParams(params, correctionIdParamSchema);
+    await attendanceService.getCorrectionForActor(authContext, correctionId);
     const data = await validateBody(request, updateCorrectionSchema);
     const updated = await attendanceService.updateCorrection(correctionId, data);
 
@@ -58,6 +60,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "attendance:manage");
 
     const { correctionId } = await validateParams(params, correctionIdParamSchema);
+    await attendanceService.getCorrectionForActor(authContext, correctionId);
     const deleted = await attendanceService.deleteCorrection(correctionId);
 
     return successResponse(deleted, undefined, `Correction ${correctionId} deleted successfully`);

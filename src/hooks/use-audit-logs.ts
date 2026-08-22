@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, getPaginatedData } from "@/lib/api/client";
 import type { ActivityLog } from "@/db/schema/activity-logs";
 
 export interface AuditLogFilterParams {
@@ -21,10 +21,12 @@ export function useAuditLogs(params?: AuditLogFilterParams) {
       if (params?.offset) searchParams.set("offset", params.offset.toString());
 
       const qs = searchParams.toString();
-      const res = await apiClient<{ items: ActivityLog[]; total: number }>(
+      const res = await apiClient<
+        ActivityLog[] | { items: ActivityLog[]; total: number }
+      >(
         `/api/v1/activity-logs${qs ? `?${qs}` : ""}`
       );
-      return res.data ?? { items: [], total: 0 };
+      return getPaginatedData(res);
     },
   });
 }

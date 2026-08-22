@@ -1,8 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiClient } from "@/lib/api/client";
+import { apiClient, getPaginatedData } from "@/lib/api/client";
 import type { Attendance } from "@/db/schema/attendances";
+import {
+  attendanceKeys,
+  dashboardKeys,
+  reportKeys,
+} from "@/lib/query-keys";
+
+export { attendanceKeys } from "@/lib/query-keys";
 
 export interface AttendanceFilterParams {
+  page?: number;
   limit?: number;
   offset?: number;
   userId?: string;
@@ -19,20 +27,15 @@ export interface AttendanceCorrection {
   updatedAt: string;
 }
 
-export const attendanceKeys = {
-  all: ["attendance"] as const,
-  lists: () => [...attendanceKeys.all, "list"] as const,
-  list: (params?: AttendanceFilterParams) => [...attendanceKeys.lists(), params] as const,
-  myToday: () => [...attendanceKeys.all, "me", "today"] as const,
-  myHistory: () => [...attendanceKeys.all, "me", "history"] as const,
-  corrections: () => [...attendanceKeys.all, "corrections"] as const,
-};
-
-export function useAttendance(params?: AttendanceFilterParams) {
+export function useAttendance(
+  params?: AttendanceFilterParams,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: attendanceKeys.list(params),
     queryFn: async () => {
       const searchParams = new URLSearchParams();
+      if (params?.page) searchParams.set("page", params.page.toString());
       if (params?.limit) searchParams.set("limit", params.limit.toString());
       if (params?.offset) searchParams.set("offset", params.offset.toString());
       if (params?.userId) searchParams.set("userId", params.userId);
@@ -40,11 +43,25 @@ export function useAttendance(params?: AttendanceFilterParams) {
       if (params?.date) searchParams.set("date", params.date);
 
       const qs = searchParams.toString();
-      const res = await apiClient<{ items: Attendance[]; total: number }>(
+      const res = await apiClient<Attendance[] | { items: Attendance[]; total: number }>(
         `/api/v1/attendance${qs ? `?${qs}` : ""}`
       );
-      return res.data ?? { items: [], total: 0 };
+      return getPaginatedData(res);
     },
+    enabled: options?.enabled,
+  });
+}
+
+export function useTodayAttendance() {
+  return useQuery({
+    queryKey: attendanceKeys.today(),
+    queryFn: async () => {
+      const res = await apiClient<Attendance | null>(
+        "/api/v1/attendance/today"
+      );
+      return res.data ?? null;
+    },
+    refetchInterval: 60_000,
   });
 }
 
@@ -61,15 +78,20 @@ export function useMyAttendance() {
 export function useCheckIn() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload?: { userId?: string }) => {
+    mutationFn: async () => {
       const res = await apiClient<Attendance>("/api/v1/attendance/check-in", {
         method: "POST",
-        body: JSON.stringify(payload || {}),
+        body: JSON.stringify({}),
       });
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
+    onSuccess: async (attendance) => {
+      queryClient.setQueryData(attendanceKeys.today(), attendance ?? null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: reportKeys.all }),
+      ]);
     },
   });
 }
@@ -77,22 +99,27 @@ export function useCheckIn() {
 export function useCheckOut() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload?: { userId?: string }) => {
+    mutationFn: async () => {
       const res = await apiClient<Attendance>("/api/v1/attendance/check-out", {
         method: "POST",
-        body: JSON.stringify(payload || {}),
+        body: JSON.stringify({}),
       });
       return res.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
+    onSuccess: async (attendance) => {
+      queryClient.setQueryData(attendanceKeys.today(), attendance ?? null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: reportKeys.all }),
+      ]);
     },
   });
 }
 
 export function useAttendanceCorrections(params?: { limit?: number; offset?: number; userId?: string }) {
   return useQuery({
-    queryKey: [...attendanceKeys.corrections(), params],
+    queryKey: attendanceKeys.corrections(params),
     queryFn: async () => {
       const searchParams = new URLSearchParams();
       if (params?.limit) searchParams.set("limit", params.limit.toString());
@@ -100,10 +127,12 @@ export function useAttendanceCorrections(params?: { limit?: number; offset?: num
       if (params?.userId) searchParams.set("userId", params.userId);
 
       const qs = searchParams.toString();
-      const res = await apiClient<{ items: AttendanceCorrection[]; total: number }>(
+      const res = await apiClient<
+        AttendanceCorrection[] | { items: AttendanceCorrection[]; total: number }
+      >(
         `/api/v1/attendance/corrections${qs ? `?${qs}` : ""}`
       );
-      return res.data ?? { items: [], total: 0 };
+      return getPaginatedData(res);
     },
   });
 }
@@ -119,7 +148,7 @@ export function useRequestCorrection() {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: attendanceKeys.corrections() });
+      queryClient.invalidateQueries({ queryKey: attendanceKeys.correctionLists() });
     },
   });
 }

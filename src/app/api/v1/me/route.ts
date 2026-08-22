@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { employeeService } from "@/features/employees/employee.service";
-import { updateEmployeeSchema } from "@/features/employees/employee.schemas";
+import { updateSelfEmployeeSchema } from "@/features/employees/employee.schemas";
 import { errorResponse, successResponse, validateBody } from "@/lib/api";
 import { getAuthContext, requirePermission } from "@/lib/auth/session";
 
@@ -21,7 +21,7 @@ export async function PATCH(request: NextRequest) {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "self:update");
 
-    const data = await validateBody(request, updateEmployeeSchema);
+    const data = await validateBody(request, updateSelfEmployeeSchema);
     const updated = await employeeService.updateMe(authContext, data);
 
     return successResponse(updated, undefined, "Profile updated successfully");

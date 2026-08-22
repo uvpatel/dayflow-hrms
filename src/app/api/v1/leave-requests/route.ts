@@ -10,6 +10,7 @@ import {
   validateBody,
 } from "@/lib/api";
 import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import { employeeService } from "@/features/employees/employee.service";
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,9 +24,16 @@ export async function GET(request: NextRequest) {
 
     // Regular employees only see their own requests unless they have leave:read:any
     let employeeId = requestedEmployeeId;
-    const canViewAll = ["admin", "hr", "manager"].includes(authContext.role);
-    if (!canViewAll) {
+    const canViewAll = authContext.role === "admin" || authContext.role === "hr";
+    if (!canViewAll && authContext.role !== "manager") {
       employeeId = authContext.employee?.id;
+    } else if (authContext.role === "manager") {
+      if (requestedEmployeeId) {
+        await employeeService.assertCanReadEmployee(authContext, requestedEmployeeId);
+        employeeId = requestedEmployeeId;
+      } else {
+        employeeId = authContext.employee?.id;
+      }
     }
 
     const { items, total } = await timeOffService.listRequests(limit, offset, employeeId, status);
@@ -43,7 +51,13 @@ export async function POST(request: NextRequest) {
     requirePermission(authContext, "leave:create");
 
     const data = await validateBody(request, createLeaveRequestSchema);
-    const created = await timeOffService.submitRequest(authContext, data);
+    const created = await timeOffService.submitRequest(authContext, {
+      ...data,
+      employeeId:
+        authContext.role === "admin" || authContext.role === "hr"
+          ? data.employeeId
+          : authContext.employee?.id,
+    });
 
     return createdResponse(created, "Leave request submitted successfully");
   } catch (error) {

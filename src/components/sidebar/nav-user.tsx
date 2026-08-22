@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
-import { ModeToggle } from "@/components/toggler";
+import { useMe } from "@/hooks/use-me";
 
 function getInitials(name?: string | null, email?: string | null): string {
   if (name && name.trim()) {
@@ -68,16 +68,20 @@ export function NavUser({
   const router = useRouter();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const { data: session } = authClient.useSession();
+  const { data: me } = useMe();
 
   const fallbackUser = initialUser || username;
-  const user = session?.user || fallbackUser;
+  const user = me?.user || fallbackUser;
 
-  const displayName = user?.name || user?.email?.split("@")[0] || "User";
+  const employeeName = me?.employee
+    ? `${me.employee.firstName} ${me.employee.lastName}`.trim()
+    : undefined;
+  const displayName = employeeName || user?.name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "";
-  const displayAvatar = (user as { image?: string })?.image || fallbackUser?.avatar || "";
-  const displayRole = ((user as { role?: string })?.role || fallbackUser?.role || "Employee").toUpperCase();
-  const initials = getInitials(user?.name, user?.email);
+  const displayAvatar =
+    (user && "image" in user ? user.image : undefined) || fallbackUser?.avatar || "";
+  const displayRole = (user?.role || me?.employee?.role || fallbackUser?.role || "Employee").toUpperCase();
+  const initials = getInitials(displayName, displayEmail);
 
   const handleSignOut = async () => {
     if (isLoggingOut) return;
@@ -153,25 +157,20 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <ModeToggle />
-                Theme
+              <DropdownMenuItem
+                render={<Link href="/dashboard/profile" />}
+                className="flex items-center gap-2 w-full cursor-pointer"
+              >
+                <BadgeCheckIcon className="size-4" />
+                <span>My profile</span>
               </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <Link href="/dashboard/people/profile" className="w-full">
-                <DropdownMenuItem className="flex items-center gap-2 w-full cursor-pointer">
-                  <BadgeCheckIcon className="size-4" />
-                  <span>My Profile</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/dashboard/settings" className="w-full">
-                <DropdownMenuItem className="flex items-center gap-2 w-full cursor-pointer">
-                  <SettingsIcon className="size-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-              </Link>
+              <DropdownMenuItem
+                render={<Link href="/dashboard/settings" />}
+                className="flex items-center gap-2 w-full cursor-pointer"
+              >
+                <SettingsIcon className="size-4" />
+                <span>Settings</span>
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem

@@ -18,6 +18,10 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import {
+  createAbsoluteCallbackURL,
+  sanitizeCallbackPath,
+} from "@/lib/auth/redirects";
 import { Loader2Icon, Eye, EyeOff } from "lucide-react";
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -39,9 +43,15 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export function SignupForm({
   className,
+  callbackURL = "/auth/redirect",
+  githubEnabled = false,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & {
+  callbackURL?: string;
+  githubEnabled?: boolean;
+}) {
   const router = useRouter();
+  const safeCallbackURL = sanitizeCallbackPath(callbackURL);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,8 +88,8 @@ export function SignupForm({
 
     if (!password) {
       errors.password = "Password is required";
-    } else if (password.length < 8) {
-      errors.password = "Password must be at least 8 characters long";
+    } else if (password.length < 12) {
+      errors.password = "Password must be at least 12 characters long";
     }
 
     if (!confirmPassword) {
@@ -106,6 +116,10 @@ export function SignupForm({
         name: name.trim(),
         email: email.trim(),
         password,
+        callbackURL: createAbsoluteCallbackURL(
+          safeCallbackURL,
+          window.location.origin,
+        ),
       });
 
       if (res.error) {
@@ -113,7 +127,11 @@ export function SignupForm({
           res.error.message || "Failed to create account. Please try again."
         );
       } else {
-        router.replace("/auth/redirect");
+        router.replace(
+          res.data?.token
+            ? safeCallbackURL
+            : `/verify-email?email=${encodeURIComponent(email.trim())}`,
+        );
         router.refresh();
       }
     } catch (err: unknown) {
@@ -133,7 +151,11 @@ export function SignupForm({
     try {
       const res = await authClient.signIn.social({
         provider: "github",
-        callbackURL: "/auth/redirect",
+        callbackURL: createAbsoluteCallbackURL(
+          safeCallbackURL,
+          window.location.origin,
+        ),
+        errorCallbackURL: `${window.location.origin}/sign-up?error=oauth`,
       });
 
       if (res?.error) {
@@ -319,7 +341,7 @@ export function SignupForm({
                   </Field>
                 </div>
                 <FieldDescription>
-                  Must be at least 8 characters long.
+                  Must be at least 12 characters long.
                 </FieldDescription>
               </Field>
 
@@ -340,31 +362,35 @@ export function SignupForm({
                 </Button>
               </Field>
 
-              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-                Or continue with
-              </FieldSeparator>
+              {githubEnabled && (
+                <>
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+                    Or continue with
+                  </FieldSeparator>
 
-              <Field>
-                <Button
-                  variant="outline"
-                  type="button"
-                  className="w-full"
-                  disabled={isSubmitting}
-                  onClick={handleGithubSignUp}
-                >
-                  {isGithubLoading ? (
-                    <>
-                      <Loader2Icon className="mr-2 size-4 animate-spin" />
-                      Connecting to GitHub...
-                    </>
-                  ) : (
-                    <>
-                      <GithubIcon className="mr-2 size-4" />
-                      Continue with GitHub
-                    </>
-                  )}
-                </Button>
-              </Field>
+                  <Field>
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="w-full"
+                      disabled={isSubmitting}
+                      onClick={handleGithubSignUp}
+                    >
+                      {isGithubLoading ? (
+                        <>
+                          <Loader2Icon className="mr-2 size-4 animate-spin" />
+                          Connecting to GitHub...
+                        </>
+                      ) : (
+                        <>
+                          <GithubIcon className="mr-2 size-4" />
+                          Continue with GitHub
+                        </>
+                      )}
+                    </Button>
+                  </Field>
+                </>
+              )}
 
               <FieldDescription className="text-center">
                 Already have an account?{" "}
