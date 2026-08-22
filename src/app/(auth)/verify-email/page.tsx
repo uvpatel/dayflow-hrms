@@ -22,12 +22,12 @@ export default function VerifyEmailPage() {
               Didn&apos;t receive an email? Check your spam folder or contact your HR administrator for an invitation link.
             </div>
             <div className="flex flex-col gap-2">
-              <Button asChild className="w-full">
-                <Link href="/sign-in">
+              <Link href="/sign-in" className="w-full">
+                <Button className="w-full">
                   <ArrowLeft className="mr-2 size-4" />
                   Return to Sign In
-                </Link>
-              </Button>
+                </Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
