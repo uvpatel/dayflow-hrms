@@ -45,6 +45,8 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer";
 import { useEmployees, useCreateEmployee } from "@/hooks/use-employees";
+import { useMe } from "@/hooks/use-me";
+import { normalizeRole } from "@/lib/permissions";
 
 export default function PeoplePage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,8 +66,13 @@ export default function PeoplePage() {
     offset,
     search: searchQuery,
   });
+  const meQuery = useMe();
 
   const createEmployeeMutation = useCreateEmployee();
+  const currentRole = normalizeRole(
+    meQuery.data?.employee?.role ?? meQuery.data?.user.role,
+  );
+  const canCreateEmployee = currentRole === "admin" || currentRole === "hr";
 
   const employees = employeesData?.items ?? [];
   const total = employeesData?.total ?? 0;
@@ -121,78 +128,80 @@ export default function PeoplePage() {
             Refresh
           </Button>
 
-          <Drawer open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DrawerTrigger  >
-              <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
-                <UserPlus className="size-4" />
-                Add Employee
-              </Button>
-            </DrawerTrigger>
-            <DrawerContent>
-              <form onSubmit={handleCreateEmployee}>
-                <DrawerHeader>
-                  <DrawerTitle>New Employee Onboarding</DrawerTitle>
-                  <DrawerDescription>
-                    Add a new team member to your Dayflow organization.
-                  </DrawerDescription>
-                </DrawerHeader>
-                <div className="grid gap-4 p-4 max-w-md mx-auto">
-                  <div className="grid grid-cols-2 gap-4">
+          {canCreateEmployee ? (
+            <Drawer open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DrawerTrigger>
+                <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
+                  <UserPlus className="size-4" />
+                  Add Employee
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent>
+                <form onSubmit={handleCreateEmployee}>
+                  <DrawerHeader>
+                    <DrawerTitle>New Employee Onboarding</DrawerTitle>
+                    <DrawerDescription>
+                      Add a new team member to your Dayflow organization.
+                    </DrawerDescription>
+                  </DrawerHeader>
+                  <div className="grid gap-4 p-4 max-w-md mx-auto">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="firstName">First Name</Label>
+                        <Input
+                          id="firstName"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                          placeholder="e.g. Sarah"
+                          required
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="lastName">Last Name</Label>
+                        <Input
+                          id="lastName"
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                          placeholder="e.g. Jenkins"
+                          required
+                        />
+                      </div>
+                    </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="firstName">First Name</Label>
+                      <Label htmlFor="email">Work Email</Label>
                       <Input
-                        id="firstName"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="e.g. Sarah"
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="sarah@dayflow.dev"
                         required
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="lastName">Last Name</Label>
+                      <Label htmlFor="phone">Phone Number</Label>
                       <Input
-                        id="lastName"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        placeholder="e.g. Jenkins"
+                        id="phone"
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        placeholder="+1 (555) 010-0002"
                         required
                       />
                     </div>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Work Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="sarah@dayflow.dev"
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="phone">Phone Number</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="+1 (555) 010-0002"
-                      required
-                    />
-                  </div>
-                </div>
-                <DrawerFooter className="max-w-md mx-auto w-full">
-                  <Button type="submit" disabled={createEmployeeMutation.isPending}>
-                    {createEmployeeMutation.isPending ? "Saving..." : "Create Employee"}
-                  </Button>
-                  <DrawerClose >
-                    <Button variant="outline">Cancel</Button>
-                  </DrawerClose>
-                </DrawerFooter>
-              </form>
-            </DrawerContent>
-          </Drawer>
+                  <DrawerFooter className="max-w-md mx-auto w-full">
+                    <Button type="submit" disabled={createEmployeeMutation.isPending}>
+                      {createEmployeeMutation.isPending ? "Saving..." : "Create Employee"}
+                    </Button>
+                    <DrawerClose>
+                      <Button variant="outline">Cancel</Button>
+                    </DrawerClose>
+                  </DrawerFooter>
+                </form>
+              </DrawerContent>
+            </Drawer>
+          ) : null}
         </div>
       </div>
 

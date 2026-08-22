@@ -1,13 +1,5 @@
-import { DataTable } from '@/components/main/data-table'
-import React from 'react'
-import data from "../../../data.json"
+import { redirect } from "next/navigation";
 
-
-
-export default function DepartmentsPage() {
-  return (
-    <div>
-        <DataTable data={data} />
-    </div>
-  )
+export default function OrganizationDepartmentsPage() {
+  redirect("/dashboard/organization?tab=departments");
 }

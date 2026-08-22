@@ -1,132 +1,136 @@
 "use client";
 
-import React from "react";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { AlertCircle, Building2, CreditCard, RefreshCw, Users } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
-import { Check, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useEmployees } from "@/hooks/use-employees";
+import { useOrganization } from "@/hooks/use-organization";
 
-const plans = [
-  {
-    name: "Starter",
-    price: "$29",
-    period: "/month",
-    description: "Essential HR & attendance tracking for small teams.",
-    features: [
-      "Up to 25 Employees",
-      "Daily Attendance Check-in/out",
-      "Basic Leave Management",
-      "Standard Email Support",
-    ],
-    highlighted: false,
-    cta: "Get Started",
-  },
-  {
-    name: "Growth",
-    price: "$89",
-    period: "/month",
-    description: "Comprehensive management for scaling companies.",
-    features: [
-      "Up to 100 Employees",
-      "Automated Payroll Calculation",
-      "Leave & Approval Workflows",
-      "Attendance Regularization",
-      "Priority Support (24h SLA)",
-    ],
-    highlighted: true,
-    badge: "Most Popular",
-    cta: "Upgrade to Growth",
-  },
-  {
-    name: "Enterprise Scale",
-    price: "$199",
-    period: "/month",
-    description: "Dedicated resources, custom integrations, and SLA.",
-    features: [
-      "Unlimited Employees",
-      "Custom Salary Structures & Payslips",
-      "Multi-Department Shift Scheduling",
-      "Dedicated PostgreSQL Instance",
-      "24/7 Dedicated Account Manager",
-    ],
-    highlighted: false,
-    cta: "Contact Sales",
-  },
-];
+export default function BillingPage() {
+  const organizationQuery = useOrganization();
+  const activeEmployeesQuery = useEmployees({ limit: 1, status: "active" });
+  const isRefreshing =
+    organizationQuery.isFetching || activeEmployeesQuery.isFetching;
 
-export default function PricingPage() {
+  const refresh = () => {
+    void Promise.all([organizationQuery.refetch(), activeEmployeesQuery.refetch()]);
+  };
+
   return (
-    <div className="flex flex-1 flex-col min-h-screen bg-background">
-      <div className="flex flex-1 flex-col gap-8 p-6 md:p-10 max-w-6xl mx-auto w-full">
-        <div className="text-center space-y-3">
-          <Badge variant="outline" className="text-xs uppercase tracking-wider text-primary border-primary/30">
-            Simple, Transparent Pricing
+    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <section className="flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Badge variant="outline" className="mb-3 gap-1.5 uppercase tracking-wider">
+            <CreditCard className="size-3.5" />
+            Workspace administration
           </Badge>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-            Choose the right plan for your organization
+          <h1 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">
+            <CreditCard className="size-7 text-primary" />
+            Billing & subscription
           </h1>
-          <p className="text-muted-foreground text-sm md:text-base max-w-xl mx-auto">
-            Scale your workforce operations with full attendance automation, leave management, and automated payroll.
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Workspace context is loaded from Dayflow. Subscription changes and
+            invoices require a configured billing provider.
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={refresh}
+          disabled={isRefreshing}
+          className="gap-1.5"
+        >
+          <RefreshCw className={isRefreshing ? "size-4 animate-spin" : "size-4"} />
+          Refresh
+        </Button>
+      </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-          {plans.map((plan) => (
-            <Card
-              key={plan.name}
-              className={`flex flex-col justify-between relative transition-all duration-200 hover:shadow-lg ${
-                plan.highlighted
-                  ? "border-primary shadow-md bg-linear-to-b from-primary/5 via-card to-card"
-                  : "border-border/80"
-              }`}
-            >
-              {plan.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="bg-primary text-primary-foreground text-xs px-3 py-0.5 shadow-sm">
-                    {plan.badge}
-                  </Badge>
-                </div>
-              )}
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl font-bold flex items-center justify-between">
-                  {plan.name}
-                  {plan.highlighted && <Sparkles className="size-5 text-primary" />}
+      <Card className="border-amber-500/30 bg-amber-500/5">
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            <span className="rounded-lg bg-amber-500/10 p-2 text-amber-700 dark:text-amber-400">
+              <AlertCircle className="size-5" />
+            </span>
+            <div>
+              <CardTitle>Billing integration is not configured</CardTitle>
+              <CardDescription className="mt-1">
+                Dayflow does not currently have a connected subscription or
+                payment API. Plan changes, payment methods, and invoice
+                downloads are intentionally unavailable instead of simulating a
+                successful action.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button variant="outline" render={<Link href="/dashboard/settings" />}>
+            Open workspace settings
+          </Button>
+          <Button variant="outline" render={<Link href="/dashboard/people" />}>
+            Open employee directory
+          </Button>
+        </CardContent>
+      </Card>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-3">
+            <div>
+              <CardDescription>Active workspace</CardDescription>
+              {organizationQuery.isLoading ? (
+                <Skeleton className="mt-2 h-7 w-44" />
+              ) : organizationQuery.isError || !organizationQuery.data ? (
+                <p className="mt-2 text-sm text-destructive">
+                  Workspace details are unavailable.
+                </p>
+              ) : (
+                <CardTitle className="mt-2 text-xl">
+                  {organizationQuery.data.name}
                 </CardTitle>
-                <CardDescription className="text-xs min-h-[32px] pt-1">
-                  {plan.description}
-                </CardDescription>
-                <div className="pt-4 flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold tracking-tight">{plan.price}</span>
-                  <span className="text-xs text-muted-foreground">{plan.period}</span>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 space-y-3 py-2">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Included Features
-                </div>
-                <ul className="space-y-2 text-xs">
-                  {plan.features.map((feat) => (
-                    <li key={feat} className="flex items-center gap-2 text-foreground">
-                      <Check className="size-3.5 text-primary shrink-0" />
-                      <span>{feat}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-              <CardFooter className="pt-4">
-                <Button
-                  className="w-full text-sm font-medium"
-                  variant={plan.highlighted ? "default" : "outline"}
-                  onClick={() => toast.success(`Selected ${plan.name} plan`)}
-                >
-                  {plan.cta}
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      </div>
+              )}
+            </div>
+            <Building2 className="size-5 text-primary" />
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {organizationQuery.data?.timezone
+              ? `Timezone: ${organizationQuery.data.timezone}`
+              : "Organization data is loaded through the workspace API."}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-3">
+            <div>
+              <CardDescription>Active employee profiles</CardDescription>
+              {activeEmployeesQuery.isLoading ? (
+                <Skeleton className="mt-2 h-7 w-16" />
+              ) : activeEmployeesQuery.isError ? (
+                <p className="mt-2 text-sm text-destructive">
+                  Employee count is unavailable.
+                </p>
+              ) : (
+                <CardTitle className="mt-2 text-xl">
+                  {activeEmployeesQuery.data?.total ?? 0}
+                </CardTitle>
+              )}
+            </div>
+            <Users className="size-5 text-primary" />
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            This live count can be used when a billing provider is connected.
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

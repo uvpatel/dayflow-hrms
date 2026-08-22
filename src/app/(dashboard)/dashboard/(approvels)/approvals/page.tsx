@@ -62,8 +62,8 @@ import {
 } from "@/hooks/use-attendance";
 import { useEmployees } from "@/hooks/use-employees";
 
-export default function ApprovalsPage() {
-  const [activeTab, setActiveTab] = useState("leave");
+export default function ApprovalsPage({ initialTab = "leave" }: { initialTab?: "leave" | "attendance" }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [statusFilter, setStatusFilter] = useState("pending");
   const [searchQuery, setSearchQuery] = useState("");
   const [rejectionTarget, setRejectionTarget] = useState<{

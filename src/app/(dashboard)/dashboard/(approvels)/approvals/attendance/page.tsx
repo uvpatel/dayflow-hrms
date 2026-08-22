@@ -1,5 +1,5 @@
 import ApprovalsPage from "../page";
 
 export default function AttendanceApprovalsSubpage() {
-  return <ApprovalsPage />;
+  return <ApprovalsPage initialTab="attendance" />;
 }

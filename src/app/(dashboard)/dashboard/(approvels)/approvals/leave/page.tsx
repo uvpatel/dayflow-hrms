@@ -1,5 +1,5 @@
 import ApprovalsPage from "../page";
 
 export default function LeaveApprovalsSubpage() {
-  return <ApprovalsPage />;
+  return <ApprovalsPage initialTab="leave" />;
 }

@@ -26,7 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useNotifications, useMarkNotificationRead } from "@/hooks/use-notifications";
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+} from "@/hooks/use-notifications";
 
 export default function NotificationsPage() {
   const [filter, setFilter] = useState("all");
@@ -34,11 +38,23 @@ export default function NotificationsPage() {
 
   const { data: notificationsData, isLoading, refetch } = useNotifications();
   const markReadMutation = useMarkNotificationRead();
+  const markAllReadMutation = useMarkAllNotificationsRead();
 
   const notifications = notificationsData ?? [];
 
   const handleMarkAllRead = async () => {
-    toast.success("All notifications marked as read");
+    try {
+      const result = await markAllReadMutation.mutateAsync();
+      toast.success(
+        result?.count
+          ? `${result.count} notification${result.count === 1 ? "" : "s"} marked as read`
+          : "You are already caught up",
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to mark notifications as read",
+      );
+    }
   };
 
   const handleMarkSingleRead = async (id: number) => {
@@ -78,7 +94,13 @@ export default function NotificationsPage() {
             <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button size="sm" variant="secondary" onClick={handleMarkAllRead} className="gap-1.5">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleMarkAllRead()}
+            disabled={markAllReadMutation.isPending || unreadCount === 0}
+            className="gap-1.5"
+          >
             <CheckCheck className="size-4" />
             Mark all as read
           </Button>

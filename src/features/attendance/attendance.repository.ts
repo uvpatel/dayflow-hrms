@@ -25,6 +25,7 @@ export interface AttendanceScope {
   organizationId?: number | null;
   employeeIds?: number[];
   status?: string;
+  workDate?: string;
   from?: Date;
   to?: Date;
 }
@@ -66,6 +67,7 @@ export class AttendanceRepository {
       conditions.push(inArray(attendances.employeeId, scope.employeeIds));
     }
     if (scope.status) conditions.push(eq(attendances.status, scope.status));
+    if (scope.workDate) conditions.push(eq(attendances.workDate, scope.workDate));
     if (scope.from) conditions.push(gte(attendances.date, scope.from));
     if (scope.to) conditions.push(lte(attendances.date, scope.to));
     return conditions.length ? and(...conditions) : undefined;

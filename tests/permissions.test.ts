@@ -23,8 +23,9 @@ describe("role permissions", () => {
     expect(hasPermission("hr", "employee:delete")).toBe(false);
   });
 
-  test("keeps approval and audit actions limited to privileged roles", () => {
-    expect(hasPermission("manager", "approval:action")).toBe(false);
+  test("limits approval actions to designated reviewers and audit access to HR", () => {
+    expect(hasPermission("employee", "approval:action")).toBe(false);
+    expect(hasPermission("manager", "approval:action")).toBe(true);
     expect(hasPermission("hr", "approval:action")).toBe(true);
     expect(hasPermission("hr", "audit:read")).toBe(true);
     expect(hasPermission("admin", "audit:read")).toBe(true);
@@ -100,6 +101,13 @@ describe("post-authentication routing", () => {
 
   test("enforces broad page access before APIs apply row-level scope", () => {
     expect(canAccessPage("employee", "/dashboard/people/profile")).toBe(true);
+    expect(canAccessPage("employee", "/dashboard/people/settings")).toBe(true);
+    expect(canAccessPage("employee", "/dashboard/people/settings/team")).toBe(false);
+    expect(canAccessPage("manager", "/dashboard/people/settings/team")).toBe(true);
+    expect(canAccessPage("hr", "/dashboard/people/onboarding")).toBe(true);
+    expect(canAccessPage("manager", "/dashboard/people/onboarding")).toBe(false);
+    expect(canAccessPage("hr", "/dashboard/people/billing")).toBe(false);
+    expect(canAccessPage("admin", "/dashboard/people/billing")).toBe(true);
     expect(canAccessPage("employee", "/dashboard/people/42")).toBe(false);
     expect(canAccessPage("manager", "/dashboard/people/42")).toBe(true);
     expect(canAccessPage("employee", "/dashboard/my-team")).toBe(false);
@@ -110,6 +118,11 @@ describe("post-authentication routing", () => {
     expect(canAccessPage("admin", "/admin")).toBe(true);
     expect(canAccessPage("hr", "/dashboard/roles")).toBe(false);
     expect(canAccessPage("admin", "/dashboard/roles")).toBe(true);
+    expect(canAccessPage("employee", "/dashboard/attendance")).toBe(true);
+    expect(canAccessPage("employee", "/dashboard/attendance/daily")).toBe(false);
+    expect(canAccessPage("employee", "/dashboard/payroll")).toBe(true);
+    expect(canAccessPage("employee", "/dashboard/work-schedules")).toBe(false);
+    expect(canAccessPage("employee", "/dashboard/unknown-route")).toBe(false);
   });
 
   test("rejects external and auth-loop callback destinations", () => {

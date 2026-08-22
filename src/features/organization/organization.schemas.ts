@@ -80,5 +80,6 @@ export const updateWorkScheduleSchema = z.object({
     .string()
     .or(z.date())
     .transform((val) => new Date(val))
+    .nullable()
     .optional(),
 }).strict();

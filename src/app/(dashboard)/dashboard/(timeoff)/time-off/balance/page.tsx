@@ -64,7 +64,7 @@ import { useMe } from "@/hooks/use-me";
 
 export default function LeaveBalancePage() {
   const [applyModalOpen, setApplyModalOpen] = useState(false);
-  const [leaveType, setLeaveType] = useState("paid_leave");
+  const [leaveType, setLeaveType] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
@@ -86,7 +86,8 @@ export default function LeaveBalancePage() {
     refetch: refetchAllocations,
   } = useLeaveAllocations(currentEmployeeId);
 
-  const { data: leaveTypes = [] } = useLeaveTypes();
+  const leaveTypesQuery = useLeaveTypes();
+  const leaveTypes = (leaveTypesQuery.data ?? []).filter((type) => type.active);
   const submitLeaveMutation = useSubmitLeaveRequest();
 
   const handleRefresh = () => {
@@ -159,8 +160,8 @@ export default function LeaveBalancePage() {
 
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!startDate || !endDate) {
-      toast.error("Please specify both start and end dates");
+    if (!leaveType || !startDate || !endDate) {
+      toast.error("Choose a leave type and specify both start and end dates");
       return;
     }
     if (new Date(startDate) > new Date(endDate)) {
@@ -175,6 +176,7 @@ export default function LeaveBalancePage() {
         endDate,
         reason: reason.trim() || undefined,
         employeeId: currentEmployeeId,
+        unit,
       });
       toast.success("Leave request submitted successfully for approval");
       setApplyModalOpen(false);
@@ -447,7 +449,7 @@ export default function LeaveBalancePage() {
                             size="sm"
                             variant="ghost"
                             onClick={() => {
-                              setLeaveType(a.leaveType.toLowerCase().replaceAll(" ", "_"));
+                              setLeaveType(a.leaveType);
                               setApplyModalOpen(true);
                             }}
                             className="h-7 text-xs text-primary"
@@ -516,27 +518,27 @@ export default function LeaveBalancePage() {
                 <Label htmlFor="leaveTypeSelect" className="text-xs font-semibold">
                   Leave Type
                 </Label>
-                <Select value={leaveType} onValueChange={(v) => setLeaveType(v ?? "paid_leave")}>
+                <Select
+                  value={leaveType}
+                  onValueChange={(value) => setLeaveType(value ?? "")}
+                  disabled={leaveTypesQuery.isLoading || leaveTypes.length === 0}
+                >
                   <SelectTrigger id="leaveTypeSelect" className="w-full text-xs">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {leaveTypes.length > 0 ? (
-                      leaveTypes.map((t) => (
-                        <SelectItem key={t.id} value={t.name.toLowerCase().replaceAll(" ", "_")}>
-                          {t.name}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <>
-                        <SelectItem value="paid_leave">Paid Annual Leave</SelectItem>
-                        <SelectItem value="casual_leave">Casual Leave</SelectItem>
-                        <SelectItem value="sick_leave">Sick Leave</SelectItem>
-                        <SelectItem value="emergency_leave">Emergency Leave</SelectItem>
-                      </>
-                    )}
+                    {leaveTypes.map((type) => (
+                      <SelectItem key={type.id} value={type.name}>
+                        {type.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {leaveTypesQuery.isError ? (
+                  <p className="text-xs text-destructive">Unable to load leave types. Refresh the page and try again.</p>
+                ) : leaveTypesQuery.isSuccess && leaveTypes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No leave types are available. Contact HR for assistance.</p>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -604,7 +606,7 @@ export default function LeaveBalancePage() {
             <DialogFooter showCloseButton>
               <Button
                 type="submit"
-                disabled={submitLeaveMutation.isPending}
+                disabled={submitLeaveMutation.isPending || leaveTypesQuery.isLoading || leaveTypes.length === 0}
                 className="text-xs"
               >
                 {submitLeaveMutation.isPending ? "Submitting..." : "Submit Application"}

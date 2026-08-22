@@ -11,28 +11,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
-const LEAVE_TYPES = [
-  { value: "paid", label: "Paid Time Off" },
-  { value: "sick", label: "Sick Leave" },
-  { value: "casual", label: "Casual Leave" },
-  { value: "unpaid", label: "Unpaid Leave" },
-] as const;
-
-type ApiResponse = { success: boolean; error?: string };
+import { useLeaveTypes, useSubmitLeaveRequest } from "@/hooks/use-leave";
 
 export default function ApplyPage() {
   const router = useRouter();
-  const [leaveType, setLeaveType] = useState<string>("paid");
+  const [leaveType, setLeaveType] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const leaveTypesQuery = useLeaveTypes();
+  const submitLeaveRequest = useSubmitLeaveRequest();
+  const leaveTypes = (leaveTypesQuery.data ?? []).filter((type) => type.active);
+  const isSubmitting = submitLeaveRequest.isPending;
 
   async function submitRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!startDate || !endDate) {
-      toast.error("Select a start and end date.");
+    if (!leaveType || !startDate || !endDate) {
+      toast.error("Choose a leave type and select both dates.");
       return;
     }
     if (endDate < startDate) {
@@ -40,26 +35,20 @@ export default function ApplyPage() {
       return;
     }
 
-    setIsSubmitting(true);
     try {
-      const response = await fetch("/api/v1/leave-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leaveType, startDate, endDate, reason: reason.trim() || undefined }),
+      await submitLeaveRequest.mutateAsync({
+        leaveType,
+        startDate,
+        endDate,
+        reason: reason.trim() || undefined,
       });
-      const result = (await response.json()) as ApiResponse;
-      if (!response.ok || !result.success) {
-        toast.error(result.error ?? "Unable to submit the leave request.");
-        return;
-      }
-
       toast.success("Leave request submitted for approval.");
       router.push("/dashboard/time-off");
       router.refresh();
-    } catch {
-      toast.error("Unable to submit the leave request. Please try again.");
-    } finally {
-      setIsSubmitting(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to submit the leave request. Please try again.",
+      );
     }
   }
 
@@ -82,12 +71,17 @@ export default function ApplyPage() {
           <form className="grid gap-5" onSubmit={submitRequest}>
             <div className="grid gap-2">
               <Label htmlFor="leave-type">Leave type</Label>
-              <Select value={leaveType} onValueChange={(value) => setLeaveType(value ?? "paid")}>
-                <SelectTrigger id="leave-type"><SelectValue placeholder="Choose a leave type" /></SelectTrigger>
+              <Select value={leaveType} onValueChange={(value) => setLeaveType(value ?? "")} disabled={leaveTypesQuery.isLoading || leaveTypes.length === 0}>
+                <SelectTrigger id="leave-type"><SelectValue placeholder={leaveTypesQuery.isLoading ? "Loading leave types…" : "Choose a leave type"} /></SelectTrigger>
                 <SelectContent>
-                  {LEAVE_TYPES.map((type) => <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>)}
+                  {leaveTypes.map((type) => <SelectItem key={type.id} value={type.name}>{type.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {leaveTypesQuery.isError ? (
+                <p className="text-sm text-destructive">Unable to load leave types. Refresh the page and try again.</p>
+              ) : leaveTypesQuery.isSuccess && leaveTypes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No leave types are currently available. Contact HR for assistance.</p>
+              ) : null}
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2">
@@ -108,7 +102,7 @@ export default function ApplyPage() {
 
             <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => router.push("/dashboard/time-off")} disabled={isSubmitting}>Cancel</Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || leaveTypesQuery.isLoading || leaveTypes.length === 0}>
                 {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : null}
                 Submit request
               </Button>

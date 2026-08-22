@@ -7,7 +7,14 @@ import { payrollKeys } from "@/lib/query-keys";
 
 export { payrollKeys } from "@/lib/query-keys";
 
-export function usePayrollPeriods(params?: { limit?: number; offset?: number }) {
+type PayrollQueryOptions = {
+  enabled?: boolean;
+};
+
+export function usePayrollPeriods(
+  params?: { limit?: number; offset?: number },
+  options?: PayrollQueryOptions,
+) {
   return useQuery({
     queryKey: payrollKeys.periods(params),
     queryFn: async () => {
@@ -23,10 +30,11 @@ export function usePayrollPeriods(params?: { limit?: number; offset?: number }) 
       );
       return getPaginatedData(res);
     },
+    enabled: options?.enabled,
   });
 }
 
-export function useSalaryStructures() {
+export function useSalaryStructures(options?: PayrollQueryOptions) {
   return useQuery({
     queryKey: payrollKeys.structures(),
     queryFn: async () => {
@@ -35,6 +43,7 @@ export function useSalaryStructures() {
       >("/api/v1/salary-structures");
       return getPaginatedData(res).items;
     },
+    enabled: options?.enabled,
   });
 }
 
@@ -77,7 +86,10 @@ export function useUpdateSalaryStructure() {
   });
 }
 
-export function usePayslips(params?: { limit?: number; offset?: number; search?: string }) {
+export function usePayslips(
+  params?: { limit?: number; offset?: number; search?: string },
+  options?: PayrollQueryOptions,
+) {
   return useQuery({
     queryKey: payrollKeys.payslips(params),
     queryFn: async () => {
@@ -92,6 +104,7 @@ export function usePayslips(params?: { limit?: number; offset?: number; search?:
       );
       return getPaginatedData(res);
     },
+    enabled: options?.enabled,
   });
 }
 
@@ -117,13 +130,31 @@ export function useCreatePayslip() {
   });
 }
 
-export function useMyPayslips() {
+export function useMyPayslips(options?: PayrollQueryOptions) {
   return useQuery({
     queryKey: payrollKeys.myPayslips(),
     queryFn: async () => {
       const res = await apiClient<Payslip[]>("/api/v1/me/payslips");
       return res.data ?? [];
     },
+    enabled: options?.enabled,
+  });
+}
+
+/** Payslips for a selected employee, subject to the server payroll scope. */
+export function useEmployeePayslips(
+  employeeId: number,
+  options?: PayrollQueryOptions,
+) {
+  return useQuery({
+    queryKey: payrollKeys.employeePayslips(employeeId),
+    queryFn: async () => {
+      const res = await apiClient<Payslip[]>(
+        `/api/v1/employees/${employeeId}/payslips`,
+      );
+      return res.data ?? [];
+    },
+    enabled: Boolean(employeeId) && options?.enabled !== false,
   });
 }
 

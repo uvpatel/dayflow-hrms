@@ -58,6 +58,7 @@ import {
   useAttendance,
   useCheckIn,
   useCheckOut,
+  useCreateManualAttendance,
   useRequestCorrection,
   useTodayAttendance,
 } from "@/hooks/use-attendance";
@@ -72,11 +73,11 @@ export default function AttendancePage() {
   const [currentTimeStr, setCurrentTimeStr] = useState("");
 
   // Manual entry modal form state
-  const [manualUserId, setManualUserId] = useState("");
+  const [manualEmployeeId, setManualEmployeeId] = useState("");
   const [manualDate, setManualDate] = useState(new Date().toISOString().split("T")[0]);
   const [manualCheckIn, setManualCheckIn] = useState("09:00");
   const [manualCheckOut, setManualCheckOut] = useState("18:00");
-  const [manualStatus, setManualStatus] = useState("present");
+  const [manualStatus, setManualStatus] = useState<"present" | "absent" | "half_day" | "leave" | "holiday">("present");
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isCorrectionOpen, setIsCorrectionOpen] = useState(false);
   const [correctionDate, setCorrectionDate] = useState(
@@ -100,6 +101,7 @@ export default function AttendancePage() {
   const canManageAttendance = role === "hr" || role === "admin";
   const checkInMutation = useCheckIn();
   const checkOutMutation = useCheckOut();
+  const createManualAttendanceMutation = useCreateManualAttendance();
   const todayAttendanceQuery = useTodayAttendance();
   const requestCorrectionMutation = useRequestCorrection();
   const hasCheckedIn = Boolean(todayAttendanceQuery.data?.checkInTime);
@@ -145,34 +147,34 @@ export default function AttendancePage() {
   // Handle Manual Entry
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const employeeId = Number(manualEmployeeId);
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      toast.error("Choose a valid employee");
+      return;
+    }
     try {
       const checkInDateTime = new Date(`${manualDate}T${manualCheckIn}:00`);
       const checkOutDateTime = manualCheckOut
         ? new Date(`${manualDate}T${manualCheckOut}:00`)
         : null;
-
-      const res = await fetch("/api/v1/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: manualUserId,
-          date: new Date(manualDate),
-          checkInTime: checkInDateTime,
-          checkOutTime: checkOutDateTime,
-          status: manualStatus,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success("Attendance entry created!");
-        setIsManualOpen(false);
-        refetch();
-      } else {
-        toast.error(data.error || "Failed to save entry");
+      if (checkOutDateTime && checkOutDateTime <= checkInDateTime) {
+        toast.error("Check-out must be after check-in");
+        return;
       }
-    } catch {
-      toast.error("Failed to submit manual attendance");
+
+      await createManualAttendanceMutation.mutateAsync({
+        employeeId,
+        date: new Date(manualDate).toISOString(),
+        checkInTime: checkInDateTime.toISOString(),
+        ...(checkOutDateTime ? { checkOutTime: checkOutDateTime.toISOString() } : {}),
+        status: manualStatus,
+      });
+      toast.success("Attendance entry created!");
+      setIsManualOpen(false);
+      setManualEmployeeId("");
+      refetch();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to submit manual attendance");
     }
   };
 
@@ -364,14 +366,23 @@ export default function AttendancePage() {
                 </DrawerHeader>
                 <div className="grid gap-4 p-4 max-w-md mx-auto">
                   <div className="grid gap-2">
-                    <Label htmlFor="employee">Employee / User ID</Label>
-                    <Input
+                    <Label htmlFor="employee">Employee</Label>
+                    <Select
                       id="employee"
-                      value={manualUserId}
-                      onChange={(e) => setManualUserId(e.target.value)}
-                      placeholder="e.g. usr_emp_01"
-                      required
-                    />
+                      value={manualEmployeeId}
+                      onValueChange={(value) => setManualEmployeeId(value ?? "")}
+                    >
+                      <SelectTrigger id="employee">
+                        <SelectValue placeholder="Select an employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(employeesData?.items ?? []).map((employee) => (
+                          <SelectItem key={employee.id} value={String(employee.id)}>
+                            {employee.firstName} {employee.lastName} · {employee.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="date">Date</Label>
@@ -406,22 +417,28 @@ export default function AttendancePage() {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="status">Status</Label>
-                    <Select value={manualStatus} onValueChange={(val) => { if (val) setManualStatus(val); }}>
+                    <Select value={manualStatus} onValueChange={(value) => {
+                      if (value === "present" || value === "absent" || value === "half_day" || value === "leave" || value === "holiday") {
+                        setManualStatus(value);
+                      }
+                    }}>
                       <SelectTrigger id="status">
                         <SelectValue placeholder="Select Status" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="present">Present</SelectItem>
-                        <SelectItem value="late">Late</SelectItem>
                         <SelectItem value="half_day">Half Day</SelectItem>
                         <SelectItem value="absent">Absent</SelectItem>
                         <SelectItem value="leave">On Leave</SelectItem>
+                        <SelectItem value="holiday">Holiday</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 <DrawerFooter className="max-w-md mx-auto w-full">
-                  <Button type="submit">Save Entry</Button>
+                  <Button type="submit" disabled={createManualAttendanceMutation.isPending || (employeesData?.items.length ?? 0) === 0}>
+                    {createManualAttendanceMutation.isPending ? "Saving…" : "Save Entry"}
+                  </Button>
                   <DrawerClose render={<Button variant="outline" />}>
                     Cancel
                   </DrawerClose>

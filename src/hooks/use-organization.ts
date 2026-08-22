@@ -28,6 +28,30 @@ export function useOrganization() {
   });
 }
 
+/**
+ * Updates the current actor's organization. The API derives the organization
+ * from the server-side session, so callers never send or choose an ID.
+ */
+export function useUpdateOrganization() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: {
+      name?: string;
+      description?: string | null;
+    }) => {
+      const res = await apiClient<Organization>("/api/v1/organizations", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orgKeys.info() });
+    },
+  });
+}
+
 export function useDepartments() {
   return useQuery({
     queryKey: orgKeys.departments(),
@@ -90,6 +114,66 @@ export function useWorkSchedules(
       return getPaginatedData(res).items;
     },
     enabled: options?.enabled,
+  });
+}
+
+export type WorkScheduleInput = {
+  employeeId: number;
+  scheduleName: string;
+  startDate: string | Date;
+  endDate?: string | Date | null;
+};
+
+export function useCreateWorkSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: WorkScheduleInput) => {
+      const res = await apiClient<WorkSchedule>("/api/v1/work-schedules", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orgKeys.all });
+    },
+  });
+}
+
+export function useUpdateWorkSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...payload
+    }: Partial<Omit<WorkScheduleInput, "employeeId">> & { id: number }) => {
+      const res = await apiClient<WorkSchedule>(`/api/v1/work-schedules/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orgKeys.all });
+    },
+  });
+}
+
+export function useDeleteWorkSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiClient<WorkSchedule>(`/api/v1/work-schedules/${id}`, {
+        method: "DELETE",
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orgKeys.all });
+    },
   });
 }
 

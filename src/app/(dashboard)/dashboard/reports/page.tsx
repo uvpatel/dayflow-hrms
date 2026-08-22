@@ -51,14 +51,23 @@ import {
   useLeaveReports,
   usePayrollReports,
 } from "@/hooks/use-reports";
+import { useMe } from "@/hooks/use-me";
+import { normalizeRole } from "@/lib/permissions";
 
 export default function ReportsPage() {
   const [activeTab, setActiveTab] = useState("overview");
+  const meQuery = useMe();
+  const role = normalizeRole(
+    meQuery.data?.employee?.role ?? meQuery.data?.user.role,
+  );
+  const canViewPayroll = role === "hr" || role === "admin";
 
   const { data: dashboardReport, isLoading: dashLoading, refetch: refetchDash } = useDashboardReports();
   const { data: attendanceReport, isLoading: attLoading, refetch: refetchAtt } = useAttendanceReports();
   const { data: leaveReport, isLoading: leaveLoading, refetch: refetchLeave } = useLeaveReports();
-  const { data: payrollReport, isLoading: payLoading, refetch: refetchPay } = usePayrollReports();
+  const { data: payrollReport, isLoading: payLoading, refetch: refetchPay } = usePayrollReports(undefined, {
+    enabled: canViewPayroll,
+  });
 
   const handleExportCSV = (filename: string) => {
     const rows = [
@@ -66,7 +75,9 @@ export default function ReportsPage() {
       ["Active workforce", dashboardReport?.totalEmployees ?? 0],
       ["Present today", dashboardReport?.presentToday ?? 0],
       ["Leave requests", leaveReport?.summary.totalRequests ?? 0],
-      ["Published payroll total", payrollReport?.summary.totalDisbursed ?? 0],
+      ...(canViewPayroll
+        ? [["Published payroll total", payrollReport?.summary.totalDisbursed ?? 0]]
+        : []),
     ];
     const csv = rows
       .map((row) => row.map((cell) => JSON.stringify(String(cell))).join(","))
@@ -84,11 +95,11 @@ export default function ReportsPage() {
     refetchDash();
     refetchAtt();
     refetchLeave();
-    refetchPay();
+    if (canViewPayroll) refetchPay();
     toast.success("Analytics & Reports synchronized");
   };
 
-  const loading = dashLoading || attLoading || leaveLoading || payLoading;
+  const loading = dashLoading || attLoading || leaveLoading || (canViewPayroll && payLoading);
 
   const attendanceData = dashboardReport?.attendanceTrend ?? [];
 
@@ -170,25 +181,27 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardDescription>Monthly Payroll Total</CardDescription>
-            <DollarSign className="size-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${(payrollReport?.summary.totalDisbursed ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
-            <p className="text-xs text-muted-foreground pt-1">Total compensation disbursed</p>
-          </CardContent>
-        </Card>
+        {canViewPayroll ? (
+          <Card>
+            <CardHeader className="pb-2 flex flex-row items-center justify-between">
+              <CardDescription>Monthly Payroll Total</CardDescription>
+              <DollarSign className="size-4 text-emerald-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">${(payrollReport?.summary.totalDisbursed ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+              <p className="text-xs text-muted-foreground pt-1">Total compensation disbursed</p>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full sm:w-auto grid-cols-4">
+        <TabsList className={`grid w-full sm:w-auto ${canViewPayroll ? "grid-cols-4" : "grid-cols-3"}`}>
           <TabsTrigger value="overview">Executive Trend</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="leave">Time Off</TabsTrigger>
-          <TabsTrigger value="payroll">Payroll</TabsTrigger>
+          {canViewPayroll ? <TabsTrigger value="payroll">Payroll</TabsTrigger> : null}
         </TabsList>
 
         {/* Executive Trend Tab */}
@@ -314,7 +327,7 @@ export default function ReportsPage() {
         </TabsContent>
 
         {/* Payroll Report Tab */}
-        <TabsContent value="payroll" className="space-y-4">
+        {canViewPayroll ? <TabsContent value="payroll" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Payroll Cycle Audit &amp; Disbursements</CardTitle>
@@ -347,7 +360,7 @@ export default function ReportsPage() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent> : null}
       </Tabs>
     </div>
   );

@@ -41,6 +41,23 @@ export function useMyTimeOff() {
   });
 }
 
+/** Time-off history for one employee, authorized by the server per actor. */
+export function useEmployeeTimeOff(
+  employeeId: number,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: leaveKeys.employeeTimeOff(employeeId),
+    queryFn: async () => {
+      const res = await apiClient<MyTimeOffData>(
+        `/api/v1/employees/${employeeId}/time-off`,
+      );
+      return res.data ?? { allocations: [], requests: [] };
+    },
+    enabled: Boolean(employeeId) && options?.enabled !== false,
+  });
+}
+
 export function useLeaveRequests(params?: LeaveRequestFilterParams) {
   return useQuery({
     queryKey: leaveKeys.requests(params),
@@ -105,6 +122,7 @@ export function useSubmitLeaveRequest() {
       endDate: string;
       reason?: string;
       employeeId?: number;
+      unit?: "full_day" | "half_day";
     }) => {
       const res = await apiClient<LeaveRequest>("/api/v1/leave-requests", {
         method: "POST",

@@ -59,10 +59,28 @@ import {
 } from "@/hooks/use-leave";
 import { useMe } from "@/hooks/use-me";
 
+const quotaCardStyles = [
+  {
+    card: "border-emerald-500/20 bg-linear-to-br from-emerald-500/10 via-card to-card",
+    icon: Plane,
+    iconClassName: "text-emerald-500",
+  },
+  {
+    card: "border-blue-500/20 bg-linear-to-br from-blue-500/10 via-card to-card",
+    icon: Calendar,
+    iconClassName: "text-blue-500",
+  },
+  {
+    card: "border-amber-500/20 bg-linear-to-br from-amber-500/10 via-card to-card",
+    icon: CalendarClock,
+    iconClassName: "text-amber-500",
+  },
+] as const;
+
 export default function TimeOffPage() {
   // Apply Form State
   const [isApplyOpen, setIsApplyOpen] = useState(false);
-  const [leaveType, setLeaveType] = useState("Paid Leave");
+  const [leaveType, setLeaveType] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
@@ -77,18 +95,22 @@ export default function TimeOffPage() {
   const currentEmployeeId = meData?.employee?.id;
 
   const { data: leaveData, isLoading, refetch } = useLeaveRequests({ limit: 100 });
-  const { data: leaveTypesData } = useLeaveTypes();
-  const { data: allocationsData } = useLeaveAllocations(currentEmployeeId);
+  const { data: leaveTypesData, isLoading: leaveTypesLoading } = useLeaveTypes();
+  const allocationsQuery = useLeaveAllocations(currentEmployeeId);
   const submitLeaveMutation = useSubmitLeaveRequest();
 
   const leaveRequests = useMemo(() => leaveData?.items ?? [], [leaveData]);
-  const leaveTypes = leaveTypesData ?? [];
-  const allocations = allocationsData ?? [];
+  const leaveTypes = (leaveTypesData ?? []).filter((type) => type.active);
+  const allocations = allocationsQuery.data ?? [];
 
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!startDate || !endDate) {
-      toast.error("Please specify both start and end dates");
+    if (!leaveType || !startDate || !endDate) {
+      toast.error("Choose a leave type and specify both start and end dates");
+      return;
+    }
+    if (endDate < startDate) {
+      toast.error("The end date cannot be before the start date");
       return;
     }
 
@@ -183,26 +205,26 @@ export default function TimeOffPage() {
                     <Label htmlFor="leaveType">Leave Type</Label>
                     <Select
                       value={leaveType}
-                      onValueChange={(val) => {
-                        if (val) setLeaveType(val);
-                      }}
+                      onValueChange={(value) => setLeaveType(value ?? "")}
+                      disabled={leaveTypesLoading || leaveTypes.length === 0}
                     >
                       <SelectTrigger id="leaveType">
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Paid Leave">Paid Time Off (PTO)</SelectItem>
-                        <SelectItem value="Sick Leave">Sick Leave</SelectItem>
-                        <SelectItem value="Casual Leave">Casual Leave</SelectItem>
-                        <SelectItem value="Unpaid Leave">Unpaid Leave</SelectItem>
-                        {leaveTypes.map((t) => (
-                          <SelectItem key={t.id} value={t.name}>
-                            {t.name}
+                        {leaveTypes.map((type) => (
+                          <SelectItem key={type.id} value={type.name}>
+                            {type.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+                  {leaveTypesLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading available leave types…</p>
+                  ) : leaveTypes.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No leave types are available. Contact HR for assistance.</p>
+                  ) : null}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor="startDate">Start Date</Label>
@@ -236,7 +258,7 @@ export default function TimeOffPage() {
                   </div>
                 </div>
                 <DrawerFooter className="max-w-md mx-auto w-full">
-                  <Button type="submit" disabled={submitLeaveMutation.isPending}>
+                  <Button type="submit" disabled={submitLeaveMutation.isPending || leaveTypesLoading || leaveTypes.length === 0}>
                     {submitLeaveMutation.isPending ? "Submitting..." : "Submit Request"}
                   </Button>
                   <DrawerClose  >
@@ -251,53 +273,43 @@ export default function TimeOffPage() {
 
       {/* Leave Quota Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-linear-to-br from-emerald-500/10 via-card to-card border-emerald-500/20">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center justify-between">
-              <span>Paid Time Off (PTO)</span>
-              <Plane className="size-4 text-emerald-500" />
-            </CardDescription>
-            <CardTitle className="text-3xl font-bold">
-              {allocations.find((a) => a.leaveType === "Paid Leave")?.allocatedDays ?? 20}{" "}
-              <span className="text-sm font-normal text-muted-foreground">days</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            {allocations.find((a) => a.leaveType === "Paid Leave")?.usedDays ?? 0} days used this year
-          </CardContent>
-        </Card>
-
-        <Card className="bg-linear-to-br from-blue-500/10 via-card to-card border-blue-500/20">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center justify-between">
-              <span>Sick Leave</span>
-              <Calendar className="size-4 text-blue-500" />
-            </CardDescription>
-            <CardTitle className="text-3xl font-bold">
-              {allocations.find((a) => a.leaveType === "Sick Leave")?.allocatedDays ?? 10}{" "}
-              <span className="text-sm font-normal text-muted-foreground">days</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            {allocations.find((a) => a.leaveType === "Sick Leave")?.usedDays ?? 0} days used this year
-          </CardContent>
-        </Card>
-
-        <Card className="bg-linear-to-br from-amber-500/10 via-card to-card border-amber-500/20">
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center justify-between">
-              <span>Casual Leave</span>
-              <CalendarClock className="size-4 text-amber-500" />
-            </CardDescription>
-            <CardTitle className="text-3xl font-bold">
-              {allocations.find((a) => a.leaveType === "Casual Leave")?.allocatedDays ?? 5}{" "}
-              <span className="text-sm font-normal text-muted-foreground">days</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            {allocations.find((a) => a.leaveType === "Casual Leave")?.usedDays ?? 0} days used this year
-          </CardContent>
-        </Card>
+        {allocationsQuery.isLoading ? (
+          <Card className="sm:col-span-2 lg:col-span-3">
+            <CardContent className="p-6 text-sm text-muted-foreground">Loading leave balances…</CardContent>
+          </Card>
+        ) : allocationsQuery.isError ? (
+          <Card className="border-destructive/30 sm:col-span-2 lg:col-span-3">
+            <CardContent className="flex items-center justify-between gap-3 p-5 text-sm text-destructive">
+              Leave balances could not be loaded.
+              <Button size="sm" variant="outline" onClick={() => void allocationsQuery.refetch()}>Try again</Button>
+            </CardContent>
+          </Card>
+        ) : allocations.length === 0 ? (
+          <Card className="sm:col-span-2 lg:col-span-3">
+            <CardContent className="p-6 text-sm text-muted-foreground">No leave balances have been allocated yet.</CardContent>
+          </Card>
+        ) : (
+          allocations.slice(0, 3).map((allocation, index) => {
+            const style = quotaCardStyles[index % quotaCardStyles.length];
+            const Icon = style.icon;
+            return (
+              <Card key={allocation.id} className={style.card}>
+                <CardHeader className="pb-2">
+                  <CardDescription className="flex items-center justify-between">
+                    <span>{allocation.leaveType}</span>
+                    <Icon className={`size-4 ${style.iconClassName}`} />
+                  </CardDescription>
+                  <CardTitle className="text-3xl font-bold">
+                    {allocation.allocatedDays} <span className="text-sm font-normal text-muted-foreground">days</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  {allocation.usedDays} days used this year
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
 
         <Card>
           <CardHeader className="pb-2">

@@ -25,6 +25,8 @@ export const attendanceKeys = {
   today: () => [...attendanceKeys.all, "today"] as const,
   lists: () => [...attendanceKeys.all, "list"] as const,
   list: (filters?: QueryFilters) => [...attendanceKeys.lists(), filters] as const,
+  employee: (employeeId: number) =>
+    [...attendanceKeys.all, "employee", employeeId] as const,
   myHistory: () => [...attendanceKeys.all, "me", "history"] as const,
   correctionLists: () => [...attendanceKeys.all, "corrections"] as const,
   corrections: (filters?: QueryFilters) =>
@@ -37,6 +39,8 @@ export const leaveKeys = {
   requests: (filters?: QueryFilters) =>
     [...leaveKeys.all, "requests", filters] as const,
   myRequests: () => [...leaveKeys.mine(), "requests"] as const,
+  employeeTimeOff: (employeeId: number) =>
+    [...leaveKeys.all, "employee", employeeId, "time-off"] as const,
   types: () => [...leaveKeys.all, "types"] as const,
   balances: (employeeId?: number) =>
     [...leaveKeys.all, "balances", employeeId ?? "me"] as const,
@@ -56,6 +60,8 @@ export const payrollKeys = {
   payslips: (filters?: QueryFilters) =>
     [...payrollKeys.all, "payslips", filters] as const,
   myPayslips: () => [...payrollKeys.all, "me", "payslips"] as const,
+  employeePayslips: (employeeId: number) =>
+    [...payrollKeys.all, "employee", employeeId, "payslips"] as const,
 };
 
 export const notificationKeys = {

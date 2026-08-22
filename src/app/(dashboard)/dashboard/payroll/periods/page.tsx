@@ -1,5 +1,5 @@
 import PayrollPage from "../page";
 
 export default function PayrollPeriodsPage() {
-  return <PayrollPage />;
+  return <PayrollPage initialTab="periods" />;
 }

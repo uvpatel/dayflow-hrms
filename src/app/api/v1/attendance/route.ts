@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination(searchParams, 50, 100);
     const status = searchParams.get("status") || undefined;
+    const workDate = searchParams.get("date") || undefined;
     const from = searchParams.get("from") ? new Date(searchParams.get("from")!) : undefined;
     const to = searchParams.get("to") ? new Date(searchParams.get("to")!) : undefined;
 
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
       authContext,
       limit,
       offset,
-      { status, from, to },
+      { status, workDate, from, to },
     );
     const meta = buildPaginationMeta(page, limit, total, { status });
 

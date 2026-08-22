@@ -24,7 +24,7 @@ type RouteParams = {
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "approval:read");
+    requirePermission(authContext, "approval:action");
 
     const { approvalId } = await validateParams(params, approvalIdParamSchema);
     const updated = await approvalsService.decide(

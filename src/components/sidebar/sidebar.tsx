@@ -88,7 +88,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               { title: "Directory", url: "/dashboard/people" },
               { title: "Onboarding", url: "/dashboard/people/onboarding" },
               { title: "People Settings", url: "/dashboard/people/settings" },
-              { title: "Billing & Plans", url: "/dashboard/people/billing" },
+              ...(isAdmin
+                ? [{ title: "Billing & Plans", url: "/dashboard/people/billing" }]
+                : []),
             ],
           },
         ]

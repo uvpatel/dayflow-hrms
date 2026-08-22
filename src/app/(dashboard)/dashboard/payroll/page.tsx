@@ -65,12 +65,57 @@ import {
   usePublishPayroll,
   useCreatePayslip,
   useCreateSalaryStructure,
+  useMyPayslips,
   useUpdateSalaryStructure,
 } from "@/hooks/use-payroll";
 import { useEmployees } from "@/hooks/use-employees";
+import { useMe } from "@/hooks/use-me";
+import { normalizeRole } from "@/lib/permissions";
 
-export default function PayrollPage() {
-  const [activeTab, setActiveTab] = useState("periods");
+export default function PayrollPage({ initialTab = "periods" }: { initialTab?: "periods" | "structures" }) {
+  const meQuery = useMe();
+  const role = normalizeRole(
+    meQuery.data?.employee?.role ?? meQuery.data?.user.role,
+  );
+
+  if (meQuery.isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+        Loading payroll access…
+      </div>
+    );
+  }
+
+  if (meQuery.isError || !meQuery.data) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-4 md:p-6 lg:p-8">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Payroll is temporarily unavailable</CardTitle>
+            <CardDescription>
+              We could not verify your payroll access. Please try again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => void meQuery.refetch()} className="gap-1.5">
+              <RefreshCw className="size-4" />
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (role === "hr" || role === "admin") {
+    return <PayrollManagementWorkspace initialTab={initialTab} />;
+  }
+
+  return <MyPayslipsWorkspace />;
+}
+
+function PayrollManagementWorkspace({ initialTab }: { initialTab: "periods" | "structures" }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // New Period Form State
   const [isPeriodDialogOpen, setIsPeriodDialogOpen] = useState(false);
@@ -704,6 +749,174 @@ export default function PayrollPage() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function MyPayslipsWorkspace() {
+  const payslipsQuery = useMyPayslips();
+  const payslips = payslipsQuery.data ?? [];
+  const totalNetPay = payslips.reduce(
+    (total, payslip) => total + Number(payslip.netSalary ?? 0),
+    0,
+  );
+  const mostRecentPayslip = payslips[0];
+
+  const formatMoney = (value: string | null) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(Number(value ?? 0));
+
+  const getPeriodLabel = (payslip: (typeof payslips)[number]) => {
+    if (payslip.name?.trim()) return payslip.name;
+    if (payslip.month && payslip.year) return `${payslip.month} ${payslip.year}`;
+    if (payslip.createdAt) {
+      return new Date(payslip.createdAt).toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      });
+    }
+    return `Payslip #${payslip.id}`;
+  };
+
+  if (payslipsQuery.isLoading) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+        Loading your published payslips…
+      </div>
+    );
+  }
+
+  if (payslipsQuery.isError) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-4 md:p-6 lg:p-8">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Your payslips are temporarily unavailable</CardTitle>
+            <CardDescription>
+              We could not load your published payroll records. Please try again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => void payslipsQuery.refetch()}
+              className="gap-1.5"
+            >
+              <RefreshCw className="size-4" />
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+            My Payslips
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            View payroll that has been finalized and published to you.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void payslipsQuery.refetch()}
+          disabled={payslipsQuery.isFetching}
+          className="gap-1.5"
+        >
+          <RefreshCw
+            className={`size-4 ${payslipsQuery.isFetching ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Published payslips</CardDescription>
+            <Wallet className="size-5 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{payslips.length}</div>
+            <p className="pt-1 text-xs text-muted-foreground">
+              Only finalized payroll is visible here.
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Total published net pay</CardDescription>
+            <DollarSign className="size-5 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatMoney(totalNetPay.toFixed(2))}
+            </div>
+            <p className="pt-1 text-xs text-muted-foreground">
+              {mostRecentPayslip
+                ? `Latest: ${getPeriodLabel(mostRecentPayslip)}`
+                : "No published payroll yet"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Published payroll history</CardTitle>
+          <CardDescription>
+            Draft and in-progress payroll records are intentionally not shown.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Pay period</TableHead>
+                <TableHead>Gross pay</TableHead>
+                <TableHead>Deductions</TableHead>
+                <TableHead>Net pay</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payslips.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="h-32 text-center text-sm text-muted-foreground"
+                  >
+                    No published payslips are available yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                payslips.map((payslip) => (
+                  <TableRow key={payslip.id}>
+                    <TableCell className="font-medium">
+                      {getPeriodLabel(payslip)}
+                    </TableCell>
+                    <TableCell>{formatMoney(payslip.grossSalary)}</TableCell>
+                    <TableCell>{formatMoney(payslip.deductions)}</TableCell>
+                    <TableCell className="font-semibold">
+                      {formatMoney(payslip.netSalary)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className="capitalize">{payslip.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }

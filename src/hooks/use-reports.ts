@@ -64,7 +64,10 @@ export function useLeaveReports(range?: string) {
   });
 }
 
-export function usePayrollReports(range?: string) {
+export function usePayrollReports(
+  range?: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: reportKeys.payroll(range),
     queryFn: async () => {
@@ -72,5 +75,6 @@ export function usePayrollReports(range?: string) {
       const res = await apiClient<PayrollReportData>(`/api/v1/reports/payroll${qs}`);
       return res.data;
     },
+    enabled: options?.enabled,
   });
 }

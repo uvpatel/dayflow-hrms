@@ -42,9 +42,23 @@ import {
 } from "@/components/ui/dialog";
 import { useEmployee, useUpdateEmployee } from "@/hooks/use-employees";
 import { useMe } from "@/hooks/use-me";
-import { useAttendance } from "@/hooks/use-attendance";
-import { useLeaveRequests } from "@/hooks/use-leave";
-import { usePayslips } from "@/hooks/use-payroll";
+import { useEmployeeAttendance } from "@/hooks/use-attendance";
+import { useEmployeeTimeOff } from "@/hooks/use-leave";
+import { useEmployeePayslips } from "@/hooks/use-payroll";
+import {
+  useDepartments,
+  useDesignations,
+  useLocations,
+  useWorkSchedules,
+} from "@/hooks/use-organization";
+import { normalizeRole } from "@/lib/permissions";
+
+function formatMoney(value: string | null) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number(value ?? 0));
+}
 
 export default function EmployeeDetailPage() {
   const params = useParams();
@@ -59,16 +73,27 @@ export default function EmployeeDetailPage() {
   const [editStatus, setEditStatus] = useState("active");
   const [editType, setEditType] = useState("full_time");
 
-  const { data: meData } = useMe();
+  const meQuery = useMe();
   const { data: employee, isLoading, refetch } = useEmployee(employeeId);
-  const { data: attendanceData } = useAttendance({ limit: 10 });
-  const { data: leaveData } = useLeaveRequests({ employeeId, limit: 10 });
-  const { data: payslipsData } = usePayslips({ limit: 10 });
+  const currentRole = normalizeRole(
+    meQuery.data?.employee?.role ?? meQuery.data?.user.role,
+  );
+  const isHRorAdmin = currentRole === "hr" || currentRole === "admin";
+  const isSelf = meQuery.data?.employee?.id === employeeId;
+  const canViewPayroll = isHRorAdmin || isSelf;
+  const attendanceQuery = useEmployeeAttendance(employeeId);
+  const timeOffQuery = useEmployeeTimeOff(employeeId);
+  const payslipsQuery = useEmployeePayslips(employeeId, {
+    enabled: canViewPayroll,
+  });
+  const departmentsQuery = useDepartments();
+  const designationsQuery = useDesignations();
+  const locationsQuery = useLocations();
+  const schedulesQuery = useWorkSchedules(employeeId, {
+    enabled: Boolean(employeeId),
+  });
 
   const updateMutation = useUpdateEmployee();
-
-  const isHRorAdmin = meData?.employee?.role === "hr" || meData?.employee?.role === "admin";
-  const isSelf = meData?.employee?.id === employeeId;
 
   const handleOpenEdit = () => {
     if (employee) {
@@ -120,9 +145,19 @@ export default function EmployeeDetailPage() {
     );
   }
 
-  const attendances = attendanceData?.items ?? [];
-  const leaves = leaveData?.items ?? [];
-  const payslips = payslipsData?.items ?? [];
+  const attendances = attendanceQuery.data ?? [];
+  const leaves = timeOffQuery.data?.requests ?? [];
+  const payslips = payslipsQuery.data ?? [];
+  const department = departmentsQuery.data?.find(
+    (item) => item.id === employee.departmentId,
+  );
+  const designation = designationsQuery.data?.find(
+    (item) => item.id === employee.designationId,
+  );
+  const location = locationsQuery.data?.find(
+    (item) => item.id === employee.locationId,
+  );
+  const schedule = schedulesQuery.data?.[0];
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
@@ -138,7 +173,7 @@ export default function EmployeeDetailPage() {
           Back to Employee Directory
         </Button>
 
-        {(isHRorAdmin || isSelf) && (
+        {isHRorAdmin && (
           <Button size="sm" onClick={handleOpenEdit} className="gap-1.5">
             <Edit className="size-4" />
             Edit Profile
@@ -185,7 +220,11 @@ export default function EmployeeDetailPage() {
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
                 <Calendar className="size-3.5 text-primary" />
-                <span>Joined {employee.joiningDate ? new Date(employee.joiningDate).toLocaleDateString() : "2024"}</span>
+                <span>
+                  Joined {employee.joiningDate
+                    ? new Date(employee.joiningDate).toLocaleDateString()
+                    : "Not recorded"}
+                </span>
               </div>
             </div>
           </div>
@@ -254,7 +293,15 @@ export default function EmployeeDetailPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 border-b pb-2">
                   <span className="text-muted-foreground">Auth Link:</span>
-                  <span className="text-emerald-600 font-medium">Verified Active</span>
+                  <span
+                    className={
+                      employee.userId
+                        ? "font-medium text-emerald-600"
+                        : "font-medium text-muted-foreground"
+                    }
+                  >
+                    {employee.userId ? "Linked account" : "Awaiting account link"}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -277,7 +324,9 @@ export default function EmployeeDetailPage() {
                     <Building2 className="size-3.5" />
                     Department
                   </div>
-                  <div className="font-semibold text-base">Engineering / Product</div>
+                  <div className="font-semibold text-base">
+                    {department?.name ?? "Not assigned"}
+                  </div>
                 </div>
 
                 <div className="p-4 rounded-xl border bg-muted/20 space-y-1">
@@ -285,7 +334,9 @@ export default function EmployeeDetailPage() {
                     <Briefcase className="size-3.5" />
                     Designation
                   </div>
-                  <div className="font-semibold text-base">Senior Engineer / Specialist</div>
+                  <div className="font-semibold text-base">
+                    {designation?.name ?? "Not assigned"}
+                  </div>
                 </div>
 
                 <div className="p-4 rounded-xl border bg-muted/20 space-y-1">
@@ -293,7 +344,9 @@ export default function EmployeeDetailPage() {
                     <MapPin className="size-3.5" />
                     Location
                   </div>
-                  <div className="font-semibold text-base">San Francisco HQ</div>
+                  <div className="font-semibold text-base">
+                    {location?.name ?? "Not assigned"}
+                  </div>
                 </div>
 
                 <div className="p-4 rounded-xl border bg-muted/20 space-y-1">
@@ -301,7 +354,11 @@ export default function EmployeeDetailPage() {
                     <Clock className="size-3.5" />
                     Schedule
                   </div>
-                  <div className="font-semibold text-base">Standard 40h (Mon-Fri)</div>
+                  <div className="font-semibold text-base">
+                    {schedulesQuery.isLoading
+                      ? "Loading schedule…"
+                      : schedule?.scheduleName ?? "Not assigned"}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -317,19 +374,54 @@ export default function EmployeeDetailPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y text-sm">
-                {attendances.slice(0, 5).map((att) => (
-                  <div key={att.id} className="p-4 flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{att.date ? new Date(att.date).toLocaleDateString() : "Recent"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {att.checkInTime ? new Date(att.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"} - {att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--:--"}
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="capitalize bg-emerald-500/10 text-emerald-700">
-                      {att.status}
-                    </Badge>
+                {attendanceQuery.isLoading ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    Loading attendance history…
                   </div>
-                ))}
+                ) : attendanceQuery.isError ? (
+                  <button
+                    type="button"
+                    onClick={() => void attendanceQuery.refetch()}
+                    className="w-full p-6 text-left text-destructive"
+                  >
+                    Attendance history could not be loaded. Select to retry.
+                  </button>
+                ) : attendances.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    No attendance records found.
+                  </div>
+                ) : (
+                  attendances.slice(0, 5).map((att) => (
+                    <div key={att.id} className="flex items-center justify-between p-4">
+                      <div>
+                        <div className="font-medium">
+                          {att.workDate ??
+                            (att.date
+                              ? new Date(att.date).toLocaleDateString()
+                              : "Recent")}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {att.checkInTime
+                            ? new Date(att.checkInTime).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "--:--"}
+                          {" – "}
+                          {att.checkOutTime
+                            ? new Date(att.checkOutTime).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "--:--"}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="capitalize">
+                        {att.status}
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -344,7 +436,19 @@ export default function EmployeeDetailPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y text-sm">
-                {leaves.length === 0 ? (
+                {timeOffQuery.isLoading ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    Loading time-off records…
+                  </div>
+                ) : timeOffQuery.isError ? (
+                  <button
+                    type="button"
+                    onClick={() => void timeOffQuery.refetch()}
+                    className="w-full p-6 text-left text-destructive"
+                  >
+                    Time-off records could not be loaded. Select to retry.
+                  </button>
+                ) : leaves.length === 0 ? (
                   <div className="p-6 text-center text-muted-foreground">No leave records found.</div>
                 ) : (
                   leaves.map((l) => (
@@ -375,17 +479,46 @@ export default function EmployeeDetailPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y text-sm">
-                {payslips.slice(0, 3).map((p) => (
-                  <div key={p.id} className="p-4 flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{p.name || "August 2026 Payslip"}</div>
-                      <div className="text-xs text-muted-foreground">Gross: $7,500.00 | Net: $8,850.00</div>
-                    </div>
-                    <Badge variant="outline" className="capitalize">
-                      {p.status || "Calculated"}
-                    </Badge>
+                {!canViewPayroll ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    Payroll details are visible only to the employee, HR, or an administrator.
                   </div>
-                ))}
+                ) : payslipsQuery.isLoading ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    Loading published payroll records…
+                  </div>
+                ) : payslipsQuery.isError ? (
+                  <button
+                    type="button"
+                    onClick={() => void payslipsQuery.refetch()}
+                    className="w-full p-6 text-left text-destructive"
+                  >
+                    Payroll records could not be loaded. Select to retry.
+                  </button>
+                ) : payslips.length === 0 ? (
+                  <div className="p-6 text-center text-muted-foreground">
+                    No payslips found.
+                  </div>
+                ) : (
+                  payslips.slice(0, 3).map((p) => (
+                    <div key={p.id} className="flex items-center justify-between p-4">
+                      <div>
+                        <div className="font-medium">
+                          {p.name ??
+                            (p.month && p.year
+                              ? `${p.month} ${p.year}`
+                              : `Payslip #${p.id}`)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Gross: {formatMoney(p.grossSalary)} | Net: {formatMoney(p.netSalary)}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="capitalize">
+                        {p.status}
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

@@ -60,6 +60,23 @@ export function useAttendance(
   });
 }
 
+/** Attendance history for one employee, scoped by the server to the actor. */
+export function useEmployeeAttendance(
+  employeeId: number,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: attendanceKeys.employee(employeeId),
+    queryFn: async () => {
+      const res = await apiClient<Attendance[]>(
+        `/api/v1/employees/${employeeId}/attendance`,
+      );
+      return res.data ?? [];
+    },
+    enabled: Boolean(employeeId) && options?.enabled !== false,
+  });
+}
+
 export function useTodayAttendance() {
   return useQuery({
     queryKey: attendanceKeys.today(),
@@ -116,6 +133,32 @@ export function useCheckOut() {
     },
     onSuccess: async (attendance) => {
       queryClient.setQueryData(attendanceKeys.today(), attendance ?? null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
+        queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: reportKeys.all }),
+      ]);
+    },
+  });
+}
+
+export function useCreateManualAttendance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      employeeId: number;
+      date: string;
+      checkInTime?: string;
+      checkOutTime?: string;
+      status: "present" | "absent" | "half_day" | "leave" | "holiday";
+    }) => {
+      const res = await apiClient<Attendance>("/api/v1/attendance", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return res.data;
+    },
+    onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: attendanceKeys.all }),
         queryClient.invalidateQueries({ queryKey: dashboardKeys.all }),

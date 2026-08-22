@@ -63,6 +63,8 @@ import {
   useCreateLocation,
   useCreateHoliday,
 } from "@/hooks/use-organization";
+import { useMe } from "@/hooks/use-me";
+import { normalizeRole } from "@/lib/permissions";
 
 export default function OrganizationPage() {
   const searchParams = useSearchParams();
@@ -96,6 +98,11 @@ export default function OrganizationPage() {
   const { data: designations = [], isLoading: desigsLoading, refetch: refetchDesigs } = useDesignations();
   const { data: locations = [], isLoading: locsLoading, refetch: refetchLocs } = useLocations();
   const { data: holidays = [], isLoading: holidaysLoading, refetch: refetchHolidays } = useHolidays();
+  const meQuery = useMe();
+  const currentRole = normalizeRole(
+    meQuery.data?.employee?.role ?? meQuery.data?.user.role,
+  );
+  const canManageStructure = currentRole === "admin" || currentRole === "hr";
 
   const createDeptMutation = useCreateDepartment();
   const createDesigMutation = useCreateDesignation();
@@ -195,7 +202,9 @@ export default function OrganizationPage() {
             Organization &amp; Workforce Structure
           </h1>
           <p className="text-sm text-muted-foreground">
-            Configure enterprise departments, job designations, global branch offices, and holiday schedules.
+            {canManageStructure
+              ? "Configure departments, job designations, office locations, and holiday schedules."
+              : "View the departments, job designations, office locations, and holiday schedule for your organization."}
           </p>
         </div>
 
@@ -275,7 +284,7 @@ export default function OrganizationPage() {
               />
             </div>
 
-            {activeTab === "departments" && (
+            {canManageStructure && activeTab === "departments" && (
               <Dialog open={isDeptOpen} onOpenChange={setIsDeptOpen}>
                 <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
@@ -321,7 +330,7 @@ export default function OrganizationPage() {
               </Dialog>
             )}
 
-            {activeTab === "designations" && (
+            {canManageStructure && activeTab === "designations" && (
               <Dialog open={isDesigOpen} onOpenChange={setIsDesigOpen}>
                 <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
@@ -378,7 +387,7 @@ export default function OrganizationPage() {
               </Dialog>
             )}
 
-            {activeTab === "locations" && (
+            {canManageStructure && activeTab === "locations" && (
               <Dialog open={isLocOpen} onOpenChange={setIsLocOpen}>
                 <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
@@ -435,7 +444,7 @@ export default function OrganizationPage() {
               </Dialog>
             )}
 
-            {activeTab === "holidays" && (
+            {canManageStructure && activeTab === "holidays" && (
               <Dialog open={isHolidayOpen} onOpenChange={setIsHolidayOpen}>
                 <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
