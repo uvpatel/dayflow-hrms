@@ -1,21 +1,19 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   Users,
   UserPlus,
   Search,
-  Building2,
   Mail,
   Phone,
-  Calendar,
   RefreshCw,
-  Plus,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
+import Link from "next/link";
 
 import {
   Card,
@@ -46,23 +44,13 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-
-interface Employee {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  createdAt: string;
-}
+import { useEmployees, useCreateEmployee } from "@/hooks/use-employees";
 
 export default function PeoplePage() {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const limit = 10;
+  const offset = (page - 1) * limit;
 
   // Add Employee Form State
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -71,66 +59,38 @@ export default function PeoplePage() {
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
 
-  const fetchEmployees = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/v1/employees?limit=100${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ""}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.data)) {
-          setEmployees(data.data);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load employees:", err);
-      toast.error("Failed to fetch employee directory");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: employeesData, isLoading, refetch } = useEmployees({
+    limit,
+    offset,
+    search: searchQuery,
+  });
 
-  useEffect(() => {
-    fetchEmployees();
-  }, [searchQuery]);
+  const createEmployeeMutation = useCreateEmployee();
+
+  const employees = employeesData?.items ?? [];
+  const total = employeesData?.total ?? 0;
+  const totalPages = Math.ceil(total / limit) || 1;
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setActionLoading(true);
-      const res = await fetch("/api/v1/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          email,
-          phoneNumber,
-        }),
+      await createEmployeeMutation.mutateAsync({
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(`Employee ${firstName} ${lastName} created!`);
-        setIsAddOpen(false);
-        setFirstName("");
-        setLastName("");
-        setEmail("");
-        setPhoneNumber("");
-        fetchEmployees();
-      } else {
-        toast.error(data.error || "Failed to create employee");
-      }
-    } catch (err) {
-      toast.error("Failed to submit employee data");
-    } finally {
-      setActionLoading(false);
+      toast.success(`Employee ${firstName} ${lastName} onboarded successfully!`);
+      setIsAddOpen(false);
+      setFirstName("");
+      setLastName("");
+      setEmail("");
+      setPhoneNumber("");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to create employee";
+      toast.error(errorMsg);
     }
   };
-
-  const totalPages = Math.ceil(employees.length / limit) || 1;
-  const paginatedEmployees = useMemo(() => {
-    const start = (page - 1) * limit;
-    return employees.slice(start, start + limit);
-  }, [employees, page, limit]);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -139,7 +99,7 @@ export default function PeoplePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl flex items-center gap-2">
             <Users className="size-7 text-primary" />
-            People & Employee Directory
+            People &amp; Employee Directory
           </h1>
           <p className="text-sm text-muted-foreground">
             Manage company employees, profiles, contact details, and organization structure.
@@ -150,17 +110,20 @@ export default function PeoplePage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchEmployees}
-            disabled={loading}
+            onClick={() => {
+              refetch();
+              toast.success("Employee directory refreshed");
+            }}
+            disabled={isLoading}
             className="gap-1.5"
           >
-            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
 
           <Drawer open={isAddOpen} onOpenChange={setIsAddOpen}>
-            <DrawerTrigger>
-              <Button size="sm" className="gap-1.5">
+            <DrawerTrigger  >
+              <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
                 <UserPlus className="size-4" />
                 Add Employee
               </Button>
@@ -170,7 +133,7 @@ export default function PeoplePage() {
                 <DrawerHeader>
                   <DrawerTitle>New Employee Onboarding</DrawerTitle>
                   <DrawerDescription>
-                    Add a new team member to your organization.
+                    Add a new team member to your Dayflow organization.
                   </DrawerDescription>
                 </DrawerHeader>
                 <div className="grid gap-4 p-4 max-w-md mx-auto">
@@ -191,7 +154,7 @@ export default function PeoplePage() {
                         id="lastName"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        placeholder="e.g. Connor"
+                        placeholder="e.g. Jenkins"
                         required
                       />
                     </div>
@@ -203,7 +166,7 @@ export default function PeoplePage() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="sarah@dayflow.app"
+                      placeholder="sarah@dayflow.dev"
                       required
                     />
                   </div>
@@ -214,16 +177,16 @@ export default function PeoplePage() {
                       type="tel"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="+1 (555) 000-0000"
+                      placeholder="+1 (555) 010-0002"
                       required
                     />
                   </div>
                 </div>
                 <DrawerFooter className="max-w-md mx-auto w-full">
-                  <Button type="submit" disabled={actionLoading}>
-                    {actionLoading ? "Saving..." : "Create Employee"}
+                  <Button type="submit" disabled={createEmployeeMutation.isPending}>
+                    {createEmployeeMutation.isPending ? "Saving..." : "Create Employee"}
                   </Button>
-                  <DrawerClose>
+                  <DrawerClose >
                     <Button variant="outline">Cancel</Button>
                   </DrawerClose>
                 </DrawerFooter>
@@ -237,16 +200,16 @@ export default function PeoplePage() {
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-lg font-semibold">Employees ({employees.length})</CardTitle>
+            <CardTitle className="text-lg font-semibold">Employees ({total})</CardTitle>
             <CardDescription>
-              Direct contact info and registration status.
+              Direct contact info, roles, and employment profiles.
             </CardDescription>
           </div>
 
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, email, phone..."
+              placeholder="Search by name, email..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -262,33 +225,34 @@ export default function PeoplePage() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="w-[80px]">ID</TableHead>
+                  <TableHead className="w-[100px]">Emp No</TableHead>
                   <TableHead>Employee</TableHead>
+                  <TableHead>Role</TableHead>
                   <TableHead>Work Email</TableHead>
                   <TableHead>Phone Number</TableHead>
-                  <TableHead>Joined Date</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                       <RefreshCw className="size-6 animate-spin mx-auto mb-2 text-primary" />
-                      Loading employees...
+                      Loading employee directory...
                     </TableCell>
                   </TableRow>
-                ) : paginatedEmployees.length === 0 ? (
+                ) : employees.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                      No employees found.
+                    <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                      No employees found matching criteria.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedEmployees.map((emp) => (
+                  employees.map((emp) => (
                     <TableRow key={emp.id} className="hover:bg-muted/30">
                       <TableCell className="font-mono text-xs text-muted-foreground">
-                        #{emp.id}
+                        {emp.employeeNumber || `#${emp.id}`}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -300,9 +264,16 @@ export default function PeoplePage() {
                             <div className="font-medium text-foreground">
                               {emp.firstName} {emp.lastName}
                             </div>
-                            <div className="text-xs text-muted-foreground">Active Team Member</div>
+                            <div className="text-xs text-muted-foreground capitalize">
+                              {emp.employmentType?.replace("_", " ") || "Full Time"}
+                            </div>
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize text-xs">
+                          {emp.role}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -313,16 +284,27 @@ export default function PeoplePage() {
                       <TableCell>
                         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                           <Phone className="size-3.5" />
-                          {emp.phoneNumber}
+                          {emp.phoneNumber || "-"}
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground tabular-nums">
-                        {emp.createdAt ? new Date(emp.createdAt).toLocaleDateString() : "Just now"}
-                      </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-200">
-                          Active
+                        <Badge
+                          variant="outline"
+                          className={`capitalize ${emp.employmentStatus === "active"
+                              ? "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400"
+                              : "bg-muted text-muted-foreground"
+                            }`}
+                        >
+                          {emp.employmentStatus}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                          <Link href={`/dashboard/people/${emp.id}`}>
+                            <Eye className="size-4" />
+                            <span className="sr-only">View profile</span>
+                          </Link>
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -334,8 +316,8 @@ export default function PeoplePage() {
           {/* Pagination */}
           <div className="flex items-center justify-between pt-4">
             <div className="text-xs text-muted-foreground">
-              Showing {employees.length > 0 ? (page - 1) * limit + 1 : 0} to{" "}
-              {Math.min(page * limit, employees.length)} of {employees.length} employees
+              Showing {total > 0 ? offset + 1 : 0} to{" "}
+              {Math.min(offset + limit, total)} of {total} employees
             </div>
             <div className="flex items-center gap-2">
               <Button

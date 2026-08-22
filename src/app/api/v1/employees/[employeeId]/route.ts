@@ -18,6 +18,14 @@ export async function GET(request: NextRequest, { params }: Params) {
     return NextResponse.json({ success: false, error: "Invalid employee ID" }, { status: 400 });
   }
 
+  // Self or privileged access check
+  if (ctx.role === "employee" && ctx.employee?.id !== targetId) {
+    return NextResponse.json(
+      { success: false, error: "Access denied. Employees can only view their own profile." },
+      { status: 403 }
+    );
+  }
+
   try {
     const orgCondition = ctx.organizationId ? eq(employees.organizationId, ctx.organizationId) : undefined;
     const idCondition = eq(employees.id, targetId);
@@ -40,13 +48,20 @@ export async function GET(request: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-  const { error, ctx } = await requirePermission("employee:update", request.headers);
+  const { error, ctx } = await requireAuth(request.headers);
   if (error || !ctx) return error!;
 
   const { employeeId } = await params;
   const targetId = Number(employeeId);
   if (isNaN(targetId)) {
     return NextResponse.json({ success: false, error: "Invalid employee ID" }, { status: 400 });
+  }
+
+  const isSelf = ctx.employee?.id === targetId;
+  const isHR = ctx.role === "hr" || ctx.role === "admin";
+
+  if (!isSelf && !isHR) {
+    return NextResponse.json({ success: false, error: "Access denied" }, { status: 403 });
   }
 
   try {
@@ -62,26 +77,31 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ success: false, error: "Employee not found in organization" }, { status: 404 });
     }
 
-    const updateData: Record<string, any> = {
+    const updateData: Record<string, string | number | Date | null> = {
       updatedAt: new Date(),
     };
 
-    if (body.firstName) updateData.firstName = body.firstName.trim();
-    if (body.lastName) updateData.lastName = body.lastName.trim();
+    // Self permitted fields: Phone number, basic info if allowed
     if (body.phoneNumber !== undefined) updateData.phoneNumber = body.phoneNumber;
-    if (body.departmentId !== undefined) updateData.departmentId = body.departmentId ? Number(body.departmentId) : null;
-    if (body.designationId !== undefined) updateData.designationId = body.designationId ? Number(body.designationId) : null;
-    if (body.locationId !== undefined) updateData.locationId = body.locationId ? Number(body.locationId) : null;
-    if (body.managerId !== undefined) updateData.managerId = body.managerId ? Number(body.managerId) : null;
-    if (body.employmentStatus) updateData.employmentStatus = body.employmentStatus;
-    if (body.employmentType) updateData.employmentType = body.employmentType;
 
-    // Role modification check: only admin can promote to admin
-    if (body.role && ["admin", "hr", "manager", "employee"].includes(body.role)) {
-      if (body.role === "admin" && ctx.role !== "admin") {
-        return NextResponse.json({ success: false, error: "Only admins can promote to admin" }, { status: 403 });
+    // HR/Admin permitted fields
+    if (isHR) {
+      if (body.firstName) updateData.firstName = String(body.firstName).trim();
+      if (body.lastName) updateData.lastName = String(body.lastName).trim();
+      if (body.departmentId !== undefined) updateData.departmentId = body.departmentId ? Number(body.departmentId) : null;
+      if (body.designationId !== undefined) updateData.designationId = body.designationId ? Number(body.designationId) : null;
+      if (body.locationId !== undefined) updateData.locationId = body.locationId ? Number(body.locationId) : null;
+      if (body.managerId !== undefined) updateData.managerId = body.managerId ? Number(body.managerId) : null;
+      if (body.employmentStatus) updateData.employmentStatus = String(body.employmentStatus);
+      if (body.employmentType) updateData.employmentType = String(body.employmentType);
+
+      // Role modification check: only admin can promote to admin
+      if (body.role && ["admin", "hr", "manager", "employee"].includes(body.role)) {
+        if (body.role === "admin" && ctx.role !== "admin") {
+          return NextResponse.json({ success: false, error: "Only admins can promote to admin" }, { status: 403 });
+        }
+        updateData.role = String(body.role);
       }
-      updateData.role = body.role;
     }
 
     const [updated] = await db

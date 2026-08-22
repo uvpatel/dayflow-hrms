@@ -335,7 +335,7 @@ export default function SettingsPage() {
                         onChange={(e) => setGracePeriod(e.target.value)}
                       />
                       <span className="text-[11px] text-muted-foreground">
-                        Arrivals within {gracePeriod} mins won't be flagged as late.
+                        Arrivals within {gracePeriod} mins won&apos;t be flagged as late.
                       </span>
                     </div>
                   </div>

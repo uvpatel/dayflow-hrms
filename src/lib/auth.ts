@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { db } from "@/db";
 import * as schema from "@/db/schema/auth-schema";
+import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email/service";
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -16,11 +17,20 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    requireEmailVerification: false, // Flexible for dev, enabled when verification link clicked
+    sendResetPassword: async ({ user, url }) => {
+      await sendPasswordResetEmail(user.email, url, user.name);
+    },
+  },
+  emailVerification: {
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendVerificationEmail(user.email, url, user.name);
+    },
   },
   plugins: [
     admin({
       // Public sign-up never grants elevated access. HR and admin roles are
-      // assigned only by an authorized server-side role-management flow.
+      // assigned only by an authorized server-side role-management flow or seed.
       defaultRole: "employee",
     }),
   ],
@@ -34,7 +44,7 @@ export const auth = betterAuth({
         }
       : {}),
   },
-  secret: process.env.BETTER_AUTH_SECRET,
+  secret: process.env.BETTER_AUTH_SECRET || "dayflow-super-secret-development-key-32-chars",
   baseURL:
     process.env.BETTER_AUTH_URL ||
     process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||

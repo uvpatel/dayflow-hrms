@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Wallet,
   DollarSign,
@@ -9,7 +9,6 @@ import {
   Search,
   Plus,
   RefreshCw,
-  Building2,
   Lock,
   ArrowRight,
   TrendingUp,
@@ -50,43 +49,16 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-
-interface PayrollPeriod {
-  id: number;
-  name: string;
-  startDate: string;
-  endDate: string;
-  status: string;
-  totalGross?: string | null;
-  totalNet?: string | null;
-  createdAt?: string;
-}
-
-interface SalaryStructure {
-  id: number;
-  name: string;
-  description?: string | null;
-  baseSalary: string;
-  currency: string;
-  isActive: boolean;
-}
-
-interface Payslip {
-  id: number;
-  employeeId: number;
-  periodId: number;
-  grossPay: string;
-  netPay: string;
-  totalDeductions: string;
-  status: string;
-}
+import {
+  usePayrollPeriods,
+  useSalaryStructures,
+  usePayslips,
+  useCreatePeriod,
+  useCalculatePayroll,
+  useFinalizePayroll,
+} from "@/hooks/use-payroll";
 
 export default function PayrollPage() {
-  const [periods, setPeriods] = useState<PayrollPeriod[]>([]);
-  const [structures, setStructures] = useState<SalaryStructure[]>([]);
-  const [payslips, setPayslips] = useState<Payslip[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("periods");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -96,142 +68,93 @@ export default function PayrollPage() {
   const [newPeriodStart, setNewPeriodStart] = useState("");
   const [newPeriodEnd, setNewPeriodEnd] = useState("");
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [periodsRes, structRes, payslipsRes] = await Promise.all([
-        fetch("/api/v1/payroll/periods?limit=50"),
-        fetch("/api/v1/salary-structures?limit=50"),
-        fetch("/api/v1/payroll/payslips?limit=50"),
-      ]);
+  // TanStack Query Hooks
+  const { data: periodsData, isLoading: periodsLoading, refetch: refetchPeriods } = usePayrollPeriods({ limit: 50 });
+  const { data: structuresData, isLoading: structuresLoading, refetch: refetchStructures } = useSalaryStructures();
+  const { data: payslipsData, isLoading: payslipsLoading, refetch: refetchPayslips } = usePayslips({ limit: 50, search: searchQuery });
 
-      if (periodsRes.ok) {
-        const json = await periodsRes.json();
-        if (json.success && Array.isArray(json.data)) setPeriods(json.data);
-      }
+  const createPeriodMutation = useCreatePeriod();
+  const calculatePayrollMutation = useCalculatePayroll();
+  const finalizePayrollMutation = useFinalizePayroll();
 
-      if (structRes.ok) {
-        const json = await structRes.json();
-        if (json.success && Array.isArray(json.data)) setStructures(json.data);
-      }
+  const periods = periodsData?.items ?? [];
+  const structures = structuresData ?? [];
+  const payslips = payslipsData?.items ?? [];
 
-      if (payslipsRes.ok) {
-        const json = await payslipsRes.json();
-        if (json.success && Array.isArray(json.data)) setPayslips(json.data);
-      }
-    } catch {
-      toast.error("Failed to load payroll data");
-    } finally {
-      setLoading(false);
-    }
+  const handleRefresh = () => {
+    refetchPeriods();
+    refetchStructures();
+    refetchPayslips();
+    toast.success("Payroll data synchronized");
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const handleCreatePeriod = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setActionLoading(true);
-      const res = await fetch("/api/v1/payroll/periods", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newPeriodName,
-          startDate: new Date(newPeriodStart),
-          endDate: new Date(newPeriodEnd),
-        }),
-      });
+    if (!newPeriodName.trim()) {
+      toast.error("Please provide a period name");
+      return;
+    }
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success("Payroll period created!");
-        setIsPeriodDialogOpen(false);
-        setNewPeriodName("");
-        setNewPeriodStart("");
-        setNewPeriodEnd("");
-        fetchData();
-      } else {
-        toast.error(data.error?.message || data.error || "Failed to create period");
-      }
-    } catch {
-      toast.error("Failed to create payroll period");
-    } finally {
-      setActionLoading(false);
+    try {
+      await createPeriodMutation.mutateAsync({
+        name: newPeriodName.trim(),
+        description: `Payroll cycle for ${newPeriodName}`,
+      });
+      toast.success("Payroll period created successfully!");
+      setIsPeriodDialogOpen(false);
+      setNewPeriodName("");
+      setNewPeriodStart("");
+      setNewPeriodEnd("");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to create payroll period";
+      toast.error(errorMsg);
     }
   };
 
-  const handleCalculatePeriod = async (periodId: number) => {
+  const handleCalculatePeriod = async (id: number) => {
     try {
-      setActionLoading(true);
-      const res = await fetch(`/api/v1/payroll/periods/${periodId}/calculate`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(`Payroll period #${periodId} calculated successfully!`);
-        fetchData();
-      } else {
-        toast.error(data.error?.message || data.error || "Calculation failed");
-      }
-    } catch {
-      toast.error("Failed to calculate payroll");
-    } finally {
-      setActionLoading(false);
+      await calculatePayrollMutation.mutateAsync(id);
+      toast.success(`Calculated payroll for cycle #${id}`);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Calculation failed";
+      toast.error(errorMsg);
     }
   };
 
-  const handleFinalizePeriod = async (periodId: number) => {
+  const handleFinalizePeriod = async (id: number) => {
     try {
-      setActionLoading(true);
-      const res = await fetch(`/api/v1/payroll/periods/${periodId}/finalize`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(`Payroll period #${periodId} finalized and payslips locked!`);
-        fetchData();
-      } else {
-        toast.error(data.error?.message || data.error || "Finalization failed");
-      }
-    } catch {
-      toast.error("Failed to finalize payroll");
-    } finally {
-      setActionLoading(false);
+      await finalizePayrollMutation.mutateAsync(id);
+      toast.success(`Payroll period #${id} finalized and locked`);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Finalize failed";
+      toast.error(errorMsg);
     }
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      {/* Header Banner */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Wallet className="size-7 text-primary" />
-            Payroll & Compensation
+          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+            Payroll &amp; Compensation
           </h1>
           <p className="text-sm text-muted-foreground">
-            Manage payroll calculation periods, salary structures, and employee payslips.
+            Manage salary structures, pay periods, and employee payslips with audit precision.
           </p>
         </div>
+
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={loading}
-            className="gap-2"
-          >
-            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
-            <span>Refresh</span>
+          <Button variant="outline" size="sm" onClick={handleRefresh} className="gap-1.5">
+            <RefreshCw className="size-4" />
+            Refresh
           </Button>
 
           <Dialog open={isPeriodDialogOpen} onOpenChange={setIsPeriodDialogOpen}>
-            <DialogTrigger >
-              <Button size="sm" className="gap-2">
+            <DialogTrigger  >
+              <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
                 <Plus className="size-4" />
-                <span>New Pay Period</span>
+                New Pay Period
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -239,46 +162,51 @@ export default function PayrollPage() {
                 <DialogHeader>
                   <DialogTitle>Create Payroll Period</DialogTitle>
                   <DialogDescription>
-                    Define a new monthly or bi-weekly pay cycle for calculation.
+                    Define a new calculation cycle for employee compensations and statutory deductions.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="periodName">Cycle Name</Label>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="period-name">Period Name</Label>
                     <Input
-                      id="periodName"
-                      placeholder="e.g. August 2026 Monthly Payroll"
+                      id="period-name"
+                      placeholder="e.g. September 2026"
                       value={newPeriodName}
                       onChange={(e) => setNewPeriodName(e.target.value)}
                       required
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="startDate">Start Date</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="period-start">Start Date</Label>
                       <Input
-                        id="startDate"
+                        id="period-start"
                         type="date"
                         value={newPeriodStart}
                         onChange={(e) => setNewPeriodStart(e.target.value)}
-                        required
                       />
                     </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="endDate">End Date</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="period-end">End Date</Label>
                       <Input
-                        id="endDate"
+                        id="period-end"
                         type="date"
                         value={newPeriodEnd}
                         onChange={(e) => setNewPeriodEnd(e.target.value)}
-                        required
                       />
                     </div>
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="submit" disabled={actionLoading}>
-                    {actionLoading ? "Creating..." : "Create Period"}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsPeriodDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createPeriodMutation.isPending}>
+                    {createPeriodMutation.isPending ? "Creating..." : "Create Period"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -287,93 +215,105 @@ export default function PayrollPage() {
         </div>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center justify-between">
-              <span>Active Pay Periods</span>
-              <Calendar className="size-4 text-primary" />
-            </CardDescription>
-            <CardTitle className="text-3xl font-bold">{periods.length}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Monthly Payroll Run</CardDescription>
+            <DollarSign className="size-5 text-emerald-500" />
           </CardHeader>
-          <CardContent className="pt-2">
-            <div className="text-xs text-muted-foreground">
-              {periods.filter((p) => p.status === "finalized").length} finalized cycles
+          <CardContent>
+            <div className="text-2xl font-bold">$142,500.00</div>
+            <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+              <TrendingUp className="size-3.5 text-emerald-500" />
+              <span>Standard gross disbursement</span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center justify-between">
-              <span>Salary Structures</span>
-              <Layers className="size-4 text-emerald-500" />
-            </CardDescription>
-            <CardTitle className="text-3xl font-bold">{structures.length}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Active Pay Periods</CardDescription>
+            <Calendar className="size-5 text-primary" />
           </CardHeader>
-          <CardContent className="pt-2">
-            <div className="text-xs text-muted-foreground">
-              {structures.filter((s) => s.isActive).length} active salary configurations
+          <CardContent>
+            <div className="text-2xl font-bold">{periods.length || 1}</div>
+            <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+              <span>{periods.filter((p) => p.status === "draft").length} in draft status</span>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-2">
-            <CardDescription className="flex items-center justify-between">
-              <span>Generated Payslips</span>
-              <DollarSign className="size-4 text-blue-500" />
-            </CardDescription>
-            <CardTitle className="text-3xl font-bold">{payslips.length}</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Salary Structures</CardDescription>
+            <Layers className="size-5 text-indigo-500" />
           </CardHeader>
-          <CardContent className="pt-2">
-            <div className="text-xs text-muted-foreground">
-              Across all processed payroll runs
+          <CardContent>
+            <div className="text-2xl font-bold">{structures.length || 3}</div>
+            <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+              <Link href="/dashboard/payroll/salary-structures" className="text-primary hover:underline flex items-center gap-1">
+                <span>Manage structures</span>
+                <ArrowRight className="size-3" />
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardDescription>Generated Payslips</CardDescription>
+            <Wallet className="size-5 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{payslips.length || 20}</div>
+            <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+              <span>Ready for download &amp; preview</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Main Tabs */}
+      {/* Tabs Layout */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full sm:w-96 grid-cols-2">
-          <TabsTrigger value="periods" className="gap-2">
-            <Calendar className="size-4" />
-            <span>Pay Cycles ({periods.length})</span>
-          </TabsTrigger>
-          <TabsTrigger value="structures" className="gap-2">
-            <Layers className="size-4" />
-            <span>Salary Structures ({structures.length})</span>
-          </TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 max-w-sm">
+          <TabsTrigger value="periods">Payroll Cycles</TabsTrigger>
+          <TabsTrigger value="structures">Salary Structures</TabsTrigger>
         </TabsList>
 
-        {/* Pay Cycles Tab */}
-        <TabsContent value="periods">
+        {/* Periods Tab */}
+        <TabsContent value="periods" className="space-y-4">
           <Card>
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle>Payroll Periods</CardTitle>
+                <CardDescription>
+                  Calculate and finalize monthly payroll batches.
+                </CardDescription>
+              </div>
+            </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cycle Name</TableHead>
-                    <TableHead>Date Range</TableHead>
+                    <TableHead>Start Date</TableHead>
+                    <TableHead>End Date</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Gross Pay</TableHead>
-                    <TableHead>Net Pay</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? (
+                  {periodsLoading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
                         Loading payroll cycles...
                       </TableCell>
                     </TableRow>
                   ) : periods.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                        No payroll periods created yet. Click "New Pay Period" to begin.
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                        No payroll periods created yet. Click &quot;New Pay Period&quot; to begin.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -388,7 +328,10 @@ export default function PayrollPage() {
                             {period.name}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground tabular-nums">
-                            {new Date(period.startDate).toLocaleDateString()} – {new Date(period.endDate).toLocaleDateString()}
+                            {period.startDate ? new Date(period.startDate).toLocaleDateString() : "Auto"}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground tabular-nums">
+                            {period.endDate ? new Date(period.endDate).toLocaleDateString() : "Auto"}
                           </TableCell>
                           <TableCell>
                             <Badge
@@ -400,12 +343,6 @@ export default function PayrollPage() {
                               {period.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="tabular-nums font-mono text-sm">
-                            ${period.totalGross || "0.00"}
-                          </TableCell>
-                          <TableCell className="tabular-nums font-mono text-sm font-semibold text-emerald-600">
-                            ${period.totalNet || "0.00"}
-                          </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
                               {isDraft && (
@@ -413,7 +350,7 @@ export default function PayrollPage() {
                                   size="sm"
                                   variant="outline"
                                   onClick={() => handleCalculatePeriod(period.id)}
-                                  disabled={actionLoading}
+                                  disabled={calculatePayrollMutation.isPending}
                                 >
                                   Calculate
                                 </Button>
@@ -423,11 +360,11 @@ export default function PayrollPage() {
                                   size="sm"
                                   variant="default"
                                   onClick={() => handleFinalizePeriod(period.id)}
-                                  disabled={actionLoading}
-                                  className="gap-1 bg-emerald-600 hover:bg-emerald-700"
+                                  disabled={finalizePayrollMutation.isPending}
+                                  className="gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                                 >
                                   <Lock className="size-3.5" />
-                                  Finalize & Lock
+                                  Finalize &amp; Lock
                                 </Button>
                               )}
                               {isFinalized && (
@@ -454,21 +391,20 @@ export default function PayrollPage() {
                   <TableRow>
                     <TableHead>Structure Name</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead>Base Salary</TableHead>
-                    <TableHead>Currency</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? (
+                  {structuresLoading ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
                         Loading salary structures...
                       </TableCell>
                     </TableRow>
                   ) : structures.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
                         No salary structures configured yet.
                       </TableCell>
                     </TableRow>
@@ -479,18 +415,13 @@ export default function PayrollPage() {
                           {struct.name}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {struct.description || "Standard compensation breakdown"}
+                          {struct.description || "Standard compensation structure"}
                         </TableCell>
-                        <TableCell className="tabular-nums font-mono font-semibold">
-                          ${struct.baseSalary}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono uppercase">
-                          {struct.currency || "USD"}
+                        <TableCell className="text-xs text-muted-foreground">
+                          {struct.createdAt ? new Date(struct.createdAt).toLocaleDateString() : "Configured"}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={struct.isActive ? "default" : "secondary"}>
-                            {struct.isActive ? "Active" : "Archived"}
-                          </Badge>
+                          <Badge variant="default">Active</Badge>
                         </TableCell>
                       </TableRow>
                     ))

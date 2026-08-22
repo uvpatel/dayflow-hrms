@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useTransition } from "react";
+import React, { useState, useMemo } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -9,7 +9,6 @@ import {
   Filter,
   RefreshCw,
   Calendar,
-  AlertCircle,
   FileCheck2,
   User,
   CalendarCheck,
@@ -46,147 +45,79 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-interface LeaveRequest {
-  id: number;
-  employeeId: number;
-  leaveType: string;
-  startDate: string;
-  endDate: string;
-  reason?: string | null;
-  status: string;
-  createdAt?: string;
-}
-
-interface AttendanceCorrection {
-  id: number;
-  employeeId: number;
-  attendanceId: number;
-  reason: string;
-  status: string;
-  createdAt?: string;
-}
-
-interface Employee {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-}
+import { useLeaveRequests, useApproveLeaveRequest, useRejectLeaveRequest } from "@/hooks/use-leave";
+import { useAttendanceCorrections } from "@/hooks/use-attendance";
+import { useEmployees } from "@/hooks/use-employees";
 
 export default function ApprovalsPage() {
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [corrections, setCorrections] = useState<AttendanceCorrection[]>([]);
-  const [employees, setEmployees] = useState<Record<number, Employee>>({});
-  const [loading, setLoading] = useState(true);
-  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("leave");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [searchQuery, setSearchQuery] = useState("");
-  const [, startTransition] = useTransition();
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [leaveRes, corrRes, empRes] = await Promise.all([
-        fetch("/api/v1/leave-requests?limit=50"),
-        fetch("/api/v1/attendance/corrections?limit=50"),
-        fetch("/api/v1/employees?limit=100"),
-      ]);
+  const { data: leaveData, isLoading: leaveLoading, refetch: refetchLeaves } = useLeaveRequests({ limit: 100 });
+  const { data: correctionsData, isLoading: corrLoading, refetch: refetchCorrections } = useAttendanceCorrections({ limit: 100 });
+  const { data: employeesData } = useEmployees({ limit: 100 });
 
-      if (leaveRes.ok) {
-        const json = await leaveRes.json();
-        if (json.success && Array.isArray(json.data)) setLeaveRequests(json.data);
-      }
+  const approveLeaveMutation = useApproveLeaveRequest();
+  const rejectLeaveMutation = useRejectLeaveRequest();
 
-      if (corrRes.ok) {
-        const json = await corrRes.json();
-        if (json.success && Array.isArray(json.data)) setCorrections(json.data);
-      }
+  const leaveRequests = leaveData?.items ?? [];
+  const corrections = correctionsData?.items ?? [];
 
-      if (empRes.ok) {
-        const json = await empRes.json();
-        if (json.success && Array.isArray(json.data)) {
-          const map: Record<number, Employee> = {};
-          json.data.forEach((emp: Employee) => {
-            map[emp.id] = emp;
-          });
-          setEmployees(map);
-        }
-      }
-    } catch {
-      toast.error("Failed to load approvals queue");
-    } finally {
-      setLoading(false);
-    }
+  const employees = useMemo(() => {
+    const map: Record<number, { firstName: string; lastName: string; email: string }> = {};
+    (employeesData?.items ?? []).forEach((emp) => {
+      map[emp.id] = emp;
+    });
+    return map;
+  }, [employeesData]);
+
+  const handleRefresh = () => {
+    refetchLeaves();
+    refetchCorrections();
+    toast.success("Approvals queue refreshed");
   };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const handleApproveLeave = async (id: number) => {
     try {
-      setActionLoadingId(id);
-      const res = await fetch(`/api/v1/leave-requests/${id}/approve`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(`Leave request #${id} approved successfully!`);
-        startTransition(() => {
-          fetchData();
-        });
-      } else {
-        toast.error(data.error?.message || data.error || "Failed to approve request");
-      }
-    } catch {
-      toast.error("Network error processing approval");
-    } finally {
-      setActionLoadingId(null);
+      await approveLeaveMutation.mutateAsync(id);
+      toast.success(`Leave request #${id} approved successfully!`);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to approve request";
+      toast.error(errorMsg);
     }
   };
 
   const handleRejectLeave = async (id: number) => {
     try {
-      setActionLoadingId(id);
-      const res = await fetch(`/api/v1/leave-requests/${id}/reject`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(`Leave request #${id} rejected`);
-        startTransition(() => {
-          fetchData();
-        });
-      } else {
-        toast.error(data.error?.message || data.error || "Failed to reject request");
-      }
-    } catch {
-      toast.error("Network error processing rejection");
-    } finally {
-      setActionLoadingId(null);
+      await rejectLeaveMutation.mutateAsync({ id, reason: "Schedule conflict with key milestone" });
+      toast.success(`Leave request #${id} rejected`);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to reject request";
+      toast.error(errorMsg);
     }
   };
 
-  const filteredLeave = leaveRequests.filter((req) => {
-    const matchesStatus = statusFilter === "all" || req.status.toLowerCase() === statusFilter.toLowerCase();
-    const emp = employees[req.employeeId];
-    const name = emp ? `${emp.firstName} ${emp.lastName}`.toLowerCase() : "";
-    const matchesSearch = !searchQuery || name.includes(searchQuery.toLowerCase()) || req.leaveType.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const filteredLeave = useMemo(() => {
+    return leaveRequests.filter((req) => {
+      const matchesStatus = statusFilter === "all" || req.status.toLowerCase() === statusFilter.toLowerCase();
+      const emp = employees[req.employeeId];
+      const name = emp ? `${emp.firstName} ${emp.lastName}`.toLowerCase() : "";
+      const matchesSearch = !searchQuery || name.includes(searchQuery.toLowerCase()) || req.leaveType.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesStatus && matchesSearch;
+    });
+  }, [leaveRequests, statusFilter, employees, searchQuery]);
 
-  const filteredCorrections = corrections.filter((c) => {
-    const matchesStatus = statusFilter === "all" || c.status.toLowerCase() === statusFilter.toLowerCase();
-    const emp = employees[c.employeeId];
-    const name = emp ? `${emp.firstName} ${emp.lastName}`.toLowerCase() : "";
-    const matchesSearch = !searchQuery || name.includes(searchQuery.toLowerCase()) || c.reason.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const filteredCorrections = useMemo(() => {
+    return corrections.filter((c) => {
+      const matchesSearch = !searchQuery || c.userId.toLowerCase().includes(searchQuery.toLowerCase()) || (c.reason && c.reason.toLowerCase().includes(searchQuery.toLowerCase()));
+      return matchesSearch;
+    });
+  }, [corrections, searchQuery]);
 
   const pendingLeaveCount = leaveRequests.filter((r) => r.status.toLowerCase() === "pending").length;
-  const pendingCorrectionCount = corrections.filter((c) => c.status.toLowerCase() === "pending").length;
+  const pendingCorrectionCount = corrections.length;
+  const loading = leaveLoading || corrLoading;
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
@@ -203,7 +134,7 @@ export default function ApprovalsPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={fetchData}
+          onClick={handleRefresh}
           disabled={loading}
           className="self-start sm:self-auto gap-2"
         >
@@ -225,7 +156,7 @@ export default function ApprovalsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Pending Attendance Corrections</CardDescription>
+            <CardDescription>Attendance Corrections</CardDescription>
             <CardTitle className="text-2xl font-bold text-blue-500 flex items-center gap-2">
               <CalendarCheck className="size-5" />
               {pendingCorrectionCount}
@@ -340,8 +271,8 @@ export default function ApprovalsPage() {
                               {req.leaveType}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-sm">
-                            {req.startDate} to {req.endDate}
+                          <TableCell className="text-sm tabular-nums">
+                            {req.startDate ? new Date(req.startDate).toLocaleDateString() : "-"} to {req.endDate ? new Date(req.endDate).toLocaleDateString() : "-"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
                             {req.reason || "No remarks provided"}
@@ -368,7 +299,7 @@ export default function ApprovalsPage() {
                                   variant="outline"
                                   className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200"
                                   onClick={() => handleApproveLeave(req.id)}
-                                  disabled={actionLoadingId === req.id}
+                                  disabled={approveLeaveMutation.isPending}
                                 >
                                   <CheckCircle2 className="size-3.5 mr-1" />
                                   Approve
@@ -378,7 +309,7 @@ export default function ApprovalsPage() {
                                   variant="outline"
                                   className="h-8 text-destructive hover:bg-destructive/10 border-destructive/30"
                                   onClick={() => handleRejectLeave(req.id)}
-                                  disabled={actionLoadingId === req.id}
+                                  disabled={rejectLeaveMutation.isPending}
                                 >
                                   <XCircle className="size-3.5 mr-1" />
                                   Reject
@@ -405,11 +336,11 @@ export default function ApprovalsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Attendance ID</TableHead>
+                    <TableHead>User ID</TableHead>
+                    <TableHead>Correction Date</TableHead>
                     <TableHead>Reason / Notes</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Created</TableHead>
+                    <TableHead className="text-right">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -426,51 +357,27 @@ export default function ApprovalsPage() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredCorrections.map((corr) => {
-                      const emp = employees[corr.employeeId];
-                      return (
-                        <TableRow key={corr.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div className="size-7 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center font-semibold text-xs">
-                                {emp ? emp.firstName[0] : <User className="size-3.5" />}
-                              </div>
-                              <div>
-                                <p className="font-medium text-sm">
-                                  {emp ? `${emp.firstName} ${emp.lastName}` : `Emp #${corr.employeeId}`}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {emp?.email || ""}
-                                </p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm font-mono">
-                            #{corr.attendanceId}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground max-w-sm truncate">
-                            {corr.reason}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                corr.status.toLowerCase() === "approved"
-                                  ? "default"
-                                  : corr.status.toLowerCase() === "rejected"
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="capitalize"
-                            >
-                              {corr.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="text-xs text-muted-foreground">Reviewed</span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
+                    filteredCorrections.map((corr) => (
+                      <TableRow key={corr.id}>
+                        <TableCell className="font-mono text-sm">
+                          {corr.userId}
+                        </TableCell>
+                        <TableCell className="text-sm tabular-nums">
+                          {corr.correctionDate ? new Date(corr.correctionDate).toLocaleDateString() : "-"}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-sm truncate">
+                          {corr.reason || "Manual time adjustment"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground tabular-nums">
+                          {corr.createdAt ? new Date(corr.createdAt).toLocaleDateString() : "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="secondary" className="capitalize">
+                            Logged
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
                 </TableBody>
               </Table>

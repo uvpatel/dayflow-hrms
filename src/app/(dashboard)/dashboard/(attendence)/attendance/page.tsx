@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   CalendarCheck,
   LogIn,
@@ -54,40 +54,15 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-
-interface AttendanceRecord {
-  id: number;
-  userId: string;
-  date: string;
-  checkInTime?: string | null;
-  checkOutTime?: string | null;
-  status: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface Employee {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-}
+import { useAttendance, useCheckIn, useCheckOut } from "@/hooks/use-attendance";
+import { useEmployees } from "@/hooks/use-employees";
 
 export default function AttendancePage() {
-  const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
-  const [employees, setEmployees] = useState<Record<string, Employee>>({});
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
-
-  // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const limit = 10;
-
-  // Active user check-in state
-  const [userCheckIn, setUserCheckIn] = useState<AttendanceRecord | null>(null);
+  const [currentTimeStr, setCurrentTimeStr] = useState("");
 
   // Manual entry modal form state
   const [manualUserId, setManualUserId] = useState("");
@@ -97,103 +72,49 @@ export default function AttendancePage() {
   const [manualStatus, setManualStatus] = useState("present");
   const [isManualOpen, setIsManualOpen] = useState(false);
 
-  // Real-time clock update
   useEffect(() => {
-    setCurrentTime(new Date());
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
+    const updateTime = () => setCurrentTimeStr(new Date().toLocaleTimeString());
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch Attendance & Employees
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const [attRes, empRes, checkInRes] = await Promise.all([
-        fetch("/api/v1/attendance?limit=50"),
-        fetch("/api/v1/employees?limit=50"),
-        fetch("/api/v1/attendance/check-in"),
-      ]);
+  const { data: attendanceData, isLoading, refetch } = useAttendance({ limit: 100 });
+  const { data: employeesData } = useEmployees({ limit: 100 });
+  const checkInMutation = useCheckIn();
+  const checkOutMutation = useCheckOut();
 
-      if (attRes.ok) {
-        const attJson = await attRes.json();
-        if (attJson.success) {
-          setAttendances(attJson.data || []);
-        }
-      }
-
-      if (empRes.ok) {
-        const empJson = await empRes.json();
-        if (empJson.success && Array.isArray(empJson.data)) {
-          const empMap: Record<string, Employee> = {};
-          empJson.data.forEach((emp: Employee) => {
-            empMap[emp.id.toString()] = emp;
-          });
-          setEmployees(empMap);
-        }
-      }
-
-      if (checkInRes.ok) {
-        const checkInJson = await checkInRes.json();
-        if (checkInJson.success) {
-          setUserCheckIn(checkInJson.data);
-        }
-      }
-    } catch {
-      toast.error("Failed to fetch attendance records");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const attendances = attendanceData?.items ?? [];
+  const employees = useMemo(() => {
+    const map: Record<string, { firstName: string; lastName: string; email: string }> = {};
+    (employeesData?.items ?? []).forEach((emp) => {
+      map[emp.id.toString()] = emp;
+      if (emp.userId) map[emp.userId] = emp;
+    });
+    return map;
+  }, [employeesData]);
 
   // Handle Punch In
   const handleCheckIn = async () => {
     try {
-      setActionLoading(true);
-      const res = await fetch("/api/v1/attendance/check-in", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success("Checked in successfully!");
-        setUserCheckIn(data.data);
-        fetchData();
-      } else {
-        toast.error(data.error?.message || data.error || "Failed to check in");
-      }
-    } catch {
-      toast.error("An error occurred during check-in");
-    } finally {
-      setActionLoading(false);
+      await checkInMutation.mutateAsync({});
+      toast.success("Checked in successfully!");
+      refetch();
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to check in";
+      toast.error(errorMsg);
     }
   };
 
   // Handle Punch Out
   const handleCheckOut = async () => {
     try {
-      setActionLoading(true);
-      const res = await fetch("/api/v1/attendance/check-out", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success("Checked out successfully!");
-        setUserCheckIn(data.data);
-        fetchData();
-      } else {
-        toast.error(data.error?.message || data.error || "Failed to check out");
-      }
-    } catch {
-      toast.error("An error occurred during check-out");
-    } finally {
-      setActionLoading(false);
+      await checkOutMutation.mutateAsync({});
+      toast.success("Checked out successfully!");
+      refetch();
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to check out";
+      toast.error(errorMsg);
     }
   };
 
@@ -201,7 +122,6 @@ export default function AttendancePage() {
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setActionLoading(true);
       const checkInDateTime = new Date(`${manualDate}T${manualCheckIn}:00`);
       const checkOutDateTime = manualCheckOut
         ? new Date(`${manualDate}T${manualCheckOut}:00`)
@@ -223,14 +143,12 @@ export default function AttendancePage() {
       if (res.ok && data.success) {
         toast.success("Attendance entry created!");
         setIsManualOpen(false);
-        fetchData();
+        refetch();
       } else {
-        toast.error(data.error?.message || data.error || "Failed to save entry");
+        toast.error(data.error || "Failed to save entry");
       }
     } catch {
       toast.error("Failed to submit manual attendance");
-    } finally {
-      setActionLoading(false);
     }
   };
 
@@ -266,10 +184,8 @@ export default function AttendancePage() {
     (a) => a.status?.toLowerCase() === "leave" || a.status?.toLowerCase() === "absent"
   ).length;
 
-  const isCheckedIn = Boolean(userCheckIn?.checkInTime && !userCheckIn?.checkOutTime);
-
   // Calculate duration helper
-  const calculateDuration = (inTime?: string | null, outTime?: string | null) => {
+  const calculateDuration = (inTime?: string | Date | null, outTime?: string | Date | null) => {
     if (!inTime) return "-";
     const start = new Date(inTime).getTime();
     const end = outTime ? new Date(outTime).getTime() : new Date().getTime();
@@ -298,17 +214,20 @@ export default function AttendancePage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchData}
-            disabled={loading}
+            onClick={() => {
+              refetch();
+              toast.success("Attendance data refreshed");
+            }}
+            disabled={isLoading}
             className="gap-1.5"
           >
-            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
 
           <Drawer open={isManualOpen} onOpenChange={setIsManualOpen}>
-            <DrawerTrigger >
-              <Button size="sm" className="gap-1.5">
+            <DrawerTrigger  >
+              <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
                 <Plus className="size-4" />
                 Add Record
               </Button>
@@ -328,7 +247,7 @@ export default function AttendancePage() {
                       id="employee"
                       value={manualUserId}
                       onChange={(e) => setManualUserId(e.target.value)}
-                      placeholder="e.g. 1"
+                      placeholder="e.g. usr_emp_01"
                       required
                     />
                   </div>
@@ -372,7 +291,7 @@ export default function AttendancePage() {
                       <SelectContent>
                         <SelectItem value="present">Present</SelectItem>
                         <SelectItem value="late">Late</SelectItem>
-                        <SelectItem value="half-day">Half Day</SelectItem>
+                        <SelectItem value="half_day">Half Day</SelectItem>
                         <SelectItem value="absent">Absent</SelectItem>
                         <SelectItem value="leave">On Leave</SelectItem>
                       </SelectContent>
@@ -380,10 +299,8 @@ export default function AttendancePage() {
                   </div>
                 </div>
                 <DrawerFooter className="max-w-md mx-auto w-full">
-                  <Button type="submit" disabled={actionLoading}>
-                    {actionLoading ? "Saving..." : "Save Entry"}
-                  </Button>
-                  <DrawerClose>
+                  <Button type="submit">Save Entry</Button>
+                  <DrawerClose  >
                     <Button variant="outline">Cancel</Button>
                   </DrawerClose>
                 </DrawerFooter>
@@ -400,48 +317,36 @@ export default function AttendancePage() {
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center justify-between">
               <span>Punch Clock</span>
-              <Badge variant={isCheckedIn ? "default" : "outline"} className="gap-1">
-                {isCheckedIn ? (
-                  <>
-                    <span className="size-2 rounded-full bg-green-500 animate-ping" />
-                    Punched In
-                  </>
-                ) : (
-                  "Punched Out"
-                )}
+              <Badge variant="outline" className="gap-1">
+                Live
               </Badge>
             </CardDescription>
             <CardTitle className="text-2xl font-bold tabular-nums">
-              {currentTime ? currentTime.toLocaleTimeString() : "--:--:--"}
+              {currentTimeStr || "--:--:--"}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex gap-2">
-              {!isCheckedIn ? (
-                <Button
-                  onClick={handleCheckIn}
-                  disabled={actionLoading}
-                  className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                >
-                  <LogIn className="size-4" />
-                  Check In
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleCheckOut}
-                  disabled={actionLoading}
-                  variant="destructive"
-                  className="w-full gap-2 shadow-sm"
-                >
-                  <LogOut className="size-4" />
-                  Check Out
-                </Button>
-              )}
+              <Button
+                onClick={handleCheckIn}
+                disabled={checkInMutation.isPending}
+                className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              >
+                <LogIn className="size-4" />
+                Check In
+              </Button>
+              <Button
+                onClick={handleCheckOut}
+                disabled={checkOutMutation.isPending}
+                variant="destructive"
+                className="w-full gap-2 shadow-sm"
+              >
+                <LogOut className="size-4" />
+                Check Out
+              </Button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              {isCheckedIn && userCheckIn?.checkInTime
-                ? `Logged in at ${new Date(userCheckIn.checkInTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                : "Record your daily work shift with one click"}
+              Record your daily work shift with one click
             </p>
           </CardContent>
         </Card>
@@ -491,7 +396,7 @@ export default function AttendancePage() {
           </CardHeader>
           <CardContent className="pt-2">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              Approved time off & absences
+              Approved time off &amp; absences
             </div>
           </CardContent>
         </Card>
@@ -501,7 +406,7 @@ export default function AttendancePage() {
       <Card>
         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-lg font-semibold">Attendance Logs</CardTitle>
+            <CardTitle className="text-lg font-semibold">Attendance Logs ({filteredRecords.length})</CardTitle>
             <CardDescription>
               Real-time synchronization with attendance tracking backend.
             </CardDescription>
@@ -539,7 +444,7 @@ export default function AttendancePage() {
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="present">Present</SelectItem>
                 <SelectItem value="late">Late</SelectItem>
-                <SelectItem value="half-day">Half Day</SelectItem>
+                <SelectItem value="half_day">Half Day</SelectItem>
                 <SelectItem value="absent">Absent</SelectItem>
                 <SelectItem value="leave">Leave</SelectItem>
               </SelectContent>
@@ -562,7 +467,7 @@ export default function AttendancePage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {isLoading ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-32 text-center">
                       <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -595,12 +500,12 @@ export default function AttendancePage() {
                           </div>
                         </TableCell>
                         <TableCell className="tabular-nums">
-                          {new Date(item.date).toLocaleDateString("en-US", {
+                          {item.date ? new Date(item.date).toLocaleDateString("en-US", {
                             weekday: "short",
                             year: "numeric",
                             month: "short",
                             day: "numeric",
-                          })}
+                          }) : "-"}
                         </TableCell>
                         <TableCell className="tabular-nums">
                           {item.checkInTime ? (
@@ -637,16 +542,15 @@ export default function AttendancePage() {
                               statusLower === "present"
                                 ? "default"
                                 : statusLower === "late"
-                                ? "secondary"
-                                : "outline"
+                                  ? "secondary"
+                                  : "outline"
                             }
-                            className={`capitalize ${
-                              statusLower === "present"
+                            className={`capitalize ${statusLower === "present"
                                 ? "bg-emerald-500/10 text-emerald-700 border-emerald-200 dark:text-emerald-400"
                                 : statusLower === "late"
-                                ? "bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-400"
-                                : "bg-rose-500/10 text-rose-700 border-rose-200 dark:text-rose-400"
-                            }`}
+                                  ? "bg-amber-500/10 text-amber-700 border-amber-200 dark:text-amber-400"
+                                  : "bg-rose-500/10 text-rose-700 border-rose-200 dark:text-rose-400"
+                              }`}
                           >
                             {item.status}
                           </Badge>

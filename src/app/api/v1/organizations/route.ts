@@ -32,10 +32,16 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const updateData: Record<string, any> = { updatedAt: new Date() };
+    const updateData: { name?: string; description?: string | null; updatedAt: Date } = {
+      updatedAt: new Date(),
+    };
 
-    if (body.name && body.name.trim()) updateData.name = body.name.trim();
-    if (body.description !== undefined) updateData.description = body.description;
+    if (body.name && typeof body.name === "string" && body.name.trim()) {
+      updateData.name = body.name.trim();
+    }
+    if (body.description !== undefined) {
+      updateData.description = typeof body.description === "string" ? body.description : null;
+    }
 
     const [updated] = await db
       .update(organizations)

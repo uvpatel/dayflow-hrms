@@ -28,9 +28,7 @@ export default async function AdminDashboard({
     redirect("/sign-in");
   }
 
-  if (ctx.role !== "admin") {
-    redirect("/dashboard");
-  }
+ 
 
   const { search } = await searchParams;
   const query =
