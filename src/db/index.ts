@@ -9,7 +9,7 @@ if (!databaseUrl) {
 }
 
 export const sql = neon(databaseUrl);
-export const db = drizzle({ client: sql });
+export const db = drizzle({ client: sql, });
 
 export * from "./schema";
 export { schema };

@@ -50,14 +50,18 @@ function getInitials(name?: string | null, email?: string | null): string {
   return "U";
 }
 
+interface UserProp {
+  name?: string;
+  email?: string;
+  avatar?: string;
+}
+
 export function NavUser({
   user: initialUser,
+  username,
 }: {
-  user?: {
-    name?: string;
-    email?: string;
-    avatar?: string;
-  };
+  user?: UserProp;
+  username?: UserProp;
 }) {
   const { isMobile } = useSidebar();
   const router = useRouter();
@@ -65,11 +69,12 @@ export function NavUser({
 
   const { data: session } = authClient.useSession();
 
-  const user = session?.user || initialUser;
+  const fallbackUser = initialUser || username;
+  const user = session?.user || fallbackUser;
 
   const displayName = user?.name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "";
-  const displayAvatar = (user as { image?: string })?.image || initialUser?.avatar || "";
+  const displayAvatar = (user as { image?: string })?.image || fallbackUser?.avatar || "";
   const initials = getInitials(user?.name, user?.email);
 
   const handleSignOut = async () => {
@@ -144,7 +149,7 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-                <DropdownMenuGroup>
+            <DropdownMenuGroup>
               <DropdownMenuItem>
                 <ModeToggle />
                 Theme
@@ -154,17 +159,15 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem>
                 <BadgeCheckIcon />
-                Account
+                <Link href="/dashboard/people/profile">Profile</Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <CreditCardIcon />
-                <Link href="/billing">Billing</Link>
+                <Link href="/dashboard/settings/billing">Billing</Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                
-
                 <BellIcon />
-                <Link href="/notifications">Notifications</Link>
+                <Link href="/dashboard/notifications">Notifications</Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -186,4 +189,3 @@ export function NavUser({
     </SidebarMenu>
   );
 }
-
