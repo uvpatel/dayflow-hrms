@@ -11,6 +11,8 @@ export const leaveTypes = pgTable("leave_types", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type LeaveType = typeof leaveTypes.$inferSelect;
+
 export const leaveTypeSchema = z.object({
   id: z.number().int().optional(),
   name: z.string(),

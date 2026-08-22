@@ -20,6 +20,7 @@ export const updateDepartmentSchema = createDepartmentSchema.partial();
 export const createDesignationSchema = z.object({
   name: z.string().min(2, "Designation name must be at least 2 characters"),
   description: z.string().optional(),
+  departmentId: z.number().int().positive().optional(),
 });
 
 export const updateDesignationSchema = createDesignationSchema.partial();
@@ -28,6 +29,9 @@ export const updateDesignationSchema = createDesignationSchema.partial();
 export const createLocationSchema = z.object({
   name: z.string().min(2, "Location name must be at least 2 characters"),
   description: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  country: z.string().optional(),
 });
 
 export const updateLocationSchema = createLocationSchema.partial();

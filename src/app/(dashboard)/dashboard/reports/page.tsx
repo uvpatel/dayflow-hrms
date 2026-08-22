@@ -83,7 +83,11 @@ export default function ReportsPage() {
     { date: "Fri", present: 18, absent: 1, leave: 1 },
   ];
 
-  const leaveByStatus = leaveReport?.byStatus ?? [
+  const leaveByStatus = leaveReport ? [
+    { status: "Approved", count: leaveReport.summary.approved },
+    { status: "Pending", count: leaveReport.summary.pending },
+    { status: "Rejected", count: leaveReport.summary.rejected },
+  ] : [
     { status: "Approved", count: 8 },
     { status: "Pending", count: 3 },
     { status: "Rejected", count: 1 },
@@ -148,8 +152,8 @@ export default function ReportsPage() {
             <Calendar className="size-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{leaveReport?.totalRequests ?? 12}</div>
-            <p className="text-xs text-muted-foreground pt-1">{leaveReport?.pendingRequests ?? 3} awaiting approval</p>
+            <div className="text-2xl font-bold">{leaveReport?.summary.totalRequests ?? 12}</div>
+            <p className="text-xs text-muted-foreground pt-1">{leaveReport?.summary.pending ?? 3} awaiting approval</p>
           </CardContent>
         </Card>
 
@@ -159,7 +163,7 @@ export default function ReportsPage() {
             <DollarSign className="size-4 text-emerald-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${payrollReport?.totalDisbursed ?? "142,500.00"}</div>
+            <div className="text-2xl font-bold">${payrollReport?.summary.totalDisbursed.toLocaleString() ?? "142,500.00"}</div>
             <p className="text-xs text-muted-foreground pt-1">Total compensation disbursed</p>
           </CardContent>
         </Card>
@@ -226,7 +230,11 @@ export default function ReportsPage() {
             <CardContent>
               <div className="h-[280px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={attendanceReport?.byStatus ?? [{ status: "Present", count: 85 }, { status: "Late", count: 8 }, { status: "Half Day", count: 3 }, { status: "Absent", count: 4 }]}>
+                  <BarChart data={attendanceReport ? [
+                    { status: "On time", count: attendanceReport.summary.onTime },
+                    { status: "Late", count: attendanceReport.summary.late },
+                    { status: "Half day", count: attendanceReport.summary.halfDay },
+                  ] : [{ status: "Present", count: 85 }, { status: "Late", count: 8 }, { status: "Half Day", count: 3 }, { status: "Absent", count: 4 }]}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                     <XAxis dataKey="status" tickLine={false} axisLine={false} />
                     <YAxis tickLine={false} axisLine={false} />

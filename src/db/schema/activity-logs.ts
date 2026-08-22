@@ -12,6 +12,8 @@ export const activityLogs = pgTable("activity_logs", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type ActivityLog = typeof activityLogs.$inferSelect;
+
 export const activityLogSchema = z.object({
   id: z.number().int().optional(),
   action: z.string(),

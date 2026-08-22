@@ -141,14 +141,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               className="data-[slot=sidebar-menu-button]:p-1.5!"
-              asChild
+              render={<a href="/dashboard" className="flex items-center gap-2" />}
             >
-              <a href="/dashboard" className="flex items-center gap-2">
                 <div className="flex size-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold">
                   <CommandIcon className="size-4" />
                 </div>
                 <span className="text-base font-semibold tracking-tight">Dayflow HR</span>
-              </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

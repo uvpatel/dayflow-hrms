@@ -265,11 +265,9 @@ export default function OrganizationPage() {
 
             {activeTab === "departments" && (
               <Dialog open={isDeptOpen} onOpenChange={setIsDeptOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
+                <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
                     Add Dept
-                  </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <form onSubmit={handleCreateDepartment}>
@@ -313,11 +311,9 @@ export default function OrganizationPage() {
 
             {activeTab === "designations" && (
               <Dialog open={isDesigOpen} onOpenChange={setIsDesigOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
+                <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
                     Add Role
-                  </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <form onSubmit={handleCreateDesignation}>
@@ -352,11 +348,9 @@ export default function OrganizationPage() {
 
             {activeTab === "locations" && (
               <Dialog open={isLocOpen} onOpenChange={setIsLocOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
+                <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
                     Add Location
-                  </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <form onSubmit={handleCreateLocation}>
@@ -411,11 +405,9 @@ export default function OrganizationPage() {
 
             {activeTab === "holidays" && (
               <Dialog open={isHolidayOpen} onOpenChange={setIsHolidayOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-1.5 bg-primary text-primary-foreground">
+                <DialogTrigger render={<Button size="sm" className="gap-1.5 bg-primary text-primary-foreground" />}>
                     <Plus className="size-4" />
                     Add Holiday
-                  </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <form onSubmit={handleCreateHoliday}>
@@ -545,7 +537,9 @@ export default function OrganizationPage() {
                     filteredDesigs.map((des) => (
                       <TableRow key={des.id}>
                         <TableCell className="font-medium text-foreground">{des.name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">Dept #{des.departmentId || "-"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {departments.find((dept) => dept.id === des.departmentId)?.name ?? "Organization-wide"}
+                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {des.createdAt ? new Date(des.createdAt).toLocaleDateString() : "Active"}
                         </TableCell>

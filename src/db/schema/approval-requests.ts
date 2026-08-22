@@ -12,6 +12,8 @@ export const approvalRequests = pgTable("approval_requests", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type ApprovalRequest = typeof approvalRequests.$inferSelect;
+
 export const approvalRequestSchema = z.object({
   id: z.number().int().optional(),
   requestorId: z.number().int(),

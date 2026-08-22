@@ -101,7 +101,7 @@ export default function NotificationsPage() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Select value={filter} onValueChange={setFilter}>
+          <Select value={filter} onValueChange={(value) => value && setFilter(value)}>
             <SelectTrigger className="w-[140px] h-9">
               <Filter className="size-3.5 mr-2 text-muted-foreground" />
               <SelectValue placeholder="Filter" />

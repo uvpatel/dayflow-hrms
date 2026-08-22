@@ -12,6 +12,8 @@ export const notifications = pgTable("notifications", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type Notification = typeof notifications.$inferSelect;
+
 export const notificationSchema = z.object({
   id: z.number().int().optional(),
   userId: z.number().int(),

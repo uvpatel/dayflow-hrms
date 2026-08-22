@@ -12,6 +12,8 @@ export const salaryStructures = pgTable("salary_structures", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type SalaryStructure = typeof salaryStructures.$inferSelect;
+
 export const salaryStructureSchema = z.object({
   id: z.number().int().optional(),
   name: z.string(),

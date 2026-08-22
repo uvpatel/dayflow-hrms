@@ -1,11 +1,15 @@
 import { z } from "zod";
 import { pgTable, serial, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { departments } from "./departments";
 
 export const designations = pgTable(
   "designations",
   {
     id: serial("id").primaryKey(),
     organizationId: integer("organization_id"),
+    departmentId: integer("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
     name: text("name").notNull(),
     description: text("description"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -13,12 +17,14 @@ export const designations = pgTable(
   },
   (table) => [
     index("designations_org_id_idx").on(table.organizationId),
+    index("designations_department_id_idx").on(table.departmentId),
   ]
 );
 
 export const designationSchema = z.object({
   id: z.number().int().optional(),
   organizationId: z.number().int().optional().nullable(),
+  departmentId: z.number().int().optional().nullable(),
   name: z.string(),
   description: z.string().optional().nullable(),
   createdAt: z.date().optional(),

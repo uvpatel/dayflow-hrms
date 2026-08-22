@@ -13,6 +13,8 @@ export const leaveAllocations = pgTable("leave_allocations", {
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export type LeaveAllocation = typeof leaveAllocations.$inferSelect;
+
 export const leaveAllocationSchema = z.object({
     id: z.number().int().optional(),
     employeeId: z.number().int(),

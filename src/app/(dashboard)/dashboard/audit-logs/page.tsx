@@ -34,7 +34,7 @@ export default function AuditLogsPage() {
   const [search, setSearch] = useState("");
   const { data: logsData, isLoading, refetch } = useAuditLogs({ limit: 50 });
 
-  const logs = logsData ?? [];
+  const logs = logsData?.items ?? [];
 
   const filteredLogs = logs.filter((log) => {
     const term = search.toLowerCase();

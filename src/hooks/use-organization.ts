@@ -93,10 +93,56 @@ export function useCreateDepartment() {
   });
 }
 
+export function useCreateDesignation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      description?: string;
+      departmentId?: number;
+    }) => {
+      const res = await apiClient<Designation>("/api/v1/designations", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orgKeys.designations() });
+    },
+  });
+}
+
+export function useCreateLocation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      description?: string;
+      address?: string;
+      city?: string;
+      country?: string;
+    }) => {
+      const res = await apiClient<Location>("/api/v1/locations", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: orgKeys.locations() });
+    },
+  });
+}
+
 export function useCreateHoliday() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { name: string; date: string; description?: string }) => {
+    mutationFn: async (payload: {
+      name: string;
+      holidayDate: string | Date;
+      description?: string;
+    }) => {
       const res = await apiClient<Holiday>("/api/v1/holidays", {
         method: "POST",
         body: JSON.stringify(payload),

@@ -19,3 +19,5 @@ export const workScheduleSchema = z.object({
   scheduleName: z.string(),
   startDate: z.date(),
 })
+
+export type WorkSchedule = typeof workSchedules.$inferSelect;

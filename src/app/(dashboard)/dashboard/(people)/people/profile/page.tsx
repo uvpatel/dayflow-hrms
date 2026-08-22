@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,16 +13,11 @@ import { User, Mail, Shield, Calendar, Loader2, Save } from "lucide-react";
 
 export default function UserProfilePage() {
   const { data: session, isPending, refetch } = authClient.useSession();
-  const [name, setName] = useState("");
+  const [name, setName] = useState<string | undefined>();
   const [isUpdating, setIsUpdating] = useState(false);
 
-  useEffect(() => {
-    if (session?.user?.name) {
-      setName(session.user.name);
-    }
-  }, [session?.user?.name]);
-
   const user = session?.user;
+  const displayName = name ?? user?.name ?? "";
   const userRole = (user as { role?: string })?.role || "user";
   const initials = user?.name
     ? user.name.slice(0, 2).toUpperCase()
@@ -30,14 +25,14 @@ export default function UserProfilePage() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
+    if (!displayName.trim()) {
       toast.error("Name cannot be empty");
       return;
     }
 
     setIsUpdating(true);
     try {
-      const parts = name.trim().split(/\s+/);
+      const parts = displayName.trim().split(/\s+/);
       const firstName = parts[0] || "";
       const lastName = parts.slice(1).join(" ") || "";
 
@@ -49,6 +44,7 @@ export default function UserProfilePage() {
       const data = await res.json();
       if (res.ok && data.success) {
         toast.success("Profile details saved successfully");
+        setName(undefined);
         refetch();
       } else {
         toast.error(data.error || "Failed to update profile");
@@ -134,7 +130,7 @@ export default function UserProfilePage() {
                     <Input
                       id="displayName"
                       className="pl-9 text-sm"
-                      value={name}
+                      value={displayName}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Your full name"
                       disabled={isUpdating}
