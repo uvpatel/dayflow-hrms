@@ -32,6 +32,14 @@ export const auth = betterAuth({
           },
         }
       : {}),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? {
+          google: {
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          },
+        }
+      : {}),
   },
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL:

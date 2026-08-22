@@ -1,76 +1,61 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { user } from "@/db/schema/auth-schema";
 import { eq } from "drizzle-orm";
 
-export async function setRole(formData: FormData): Promise<void> {
+export async function setRole(formData: FormData) {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
-  const callerRole = (session?.user as { role?: string })?.role;
-  if (!session || callerRole !== "admin") {
-    const existingAdmins = await db
-      .select()
-      .from(user)
-      .where(eq(user.role, "admin"))
-      .limit(1);
-
-    if (existingAdmins.length > 0 && callerRole !== "admin") {
-      console.error("Unauthorized: Only admins can change user roles");
-      return;
-    }
+  if (!session || session.user.role !== "admin") {
+    throw new Error("Unauthorized");
   }
 
   const id = formData.get("id") as string;
-  const role = (formData.get("role") as string) || "user";
+  const role = formData.get("role") as string;
 
-  if (!id) return;
-
-  try {
-    await db
-      .update(user)
-      .set({
-        role,
-        updatedAt: new Date(),
-      })
-      .where(eq(user.id, id));
-
-    revalidatePath("/admin");
-  } catch (err) {
-    console.error("Failed to update user role:", err);
+  if (!id || !role) {
+    throw new Error("Missing id or role");
   }
+
+  await db
+    .update(user)
+    .set({
+      role,
+      updatedAt: new Date(),
+    })
+    .where(eq(user.id, id));
+
+  revalidatePath("/admin");
 }
 
-export async function removeRole(formData: FormData): Promise<void> {
+export async function removeRole(formData: FormData) {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
-  const callerRole = (session?.user as { role?: string })?.role;
-  if (!session || callerRole !== "admin") {
-    console.error("Unauthorized: Only admins can remove roles");
-    return;
+  if (!session || session.user.role !== "admin") {
+    throw new Error("Unauthorized");
   }
 
   const id = formData.get("id") as string;
-  if (!id) return;
 
-  try {
-    await db
-      .update(user)
-      .set({
-        role: "user",
-        updatedAt: new Date(),
-      })
-      .where(eq(user.id, id));
-
-    revalidatePath("/admin");
-  } catch (err) {
-    console.error("Failed to remove role:", err);
+  if (!id) {
+    throw new Error("Missing id");
   }
+
+  await db
+    .update(user)
+    .set({
+      role: "user",
+      updatedAt: new Date(),
+    })
+    .where(eq(user.id, id));
+
+  revalidatePath("/admin");
 }
