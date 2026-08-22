@@ -1,0 +1,61 @@
+import { z } from "zod";
+
+// Leave Types
+export const createLeaveTypeSchema = z.object({
+  name: z.string().min(2, "Leave type name must be at least 2 characters"),
+  description: z.string().optional(),
+});
+
+export const updateLeaveTypeSchema = createLeaveTypeSchema.partial();
+
+// Leave Policies
+export const createLeavePolicySchema = z.object({
+  name: z.string().min(2, "Policy name must be at least 2 characters"),
+  description: z.string().optional(),
+});
+
+export const updateLeavePolicySchema = createLeavePolicySchema.partial();
+
+// Leave Allocations
+export const createLeaveAllocationSchema = z.object({
+  employeeId: z.number().int().positive("Valid employee ID is required"),
+  leaveType: z.string().min(1, "Leave type is required"),
+  allocatedDays: z.number().int().positive("Allocated days must be greater than 0"),
+  usedDays: z.number().int().default(0),
+});
+
+export const updateLeaveAllocationSchema = z.object({
+  allocatedDays: z.number().int().positive().optional(),
+  usedDays: z.number().int().min(0).optional(),
+});
+
+// Leave Requests
+export const createLeaveRequestSchema = z.object({
+  employeeId: z.number().int().positive().optional(),
+  leaveType: z.string().min(1, "Leave type is required"),
+  startDate: z
+    .string()
+    .or(z.date())
+    .transform((val) => new Date(val)),
+  endDate: z
+    .string()
+    .or(z.date())
+    .transform((val) => new Date(val)),
+  reason: z.string().optional(),
+});
+
+export const updateLeaveRequestSchema = z.object({
+  leaveType: z.string().min(1).optional(),
+  startDate: z
+    .string()
+    .or(z.date())
+    .transform((val) => new Date(val))
+    .optional(),
+  endDate: z
+    .string()
+    .or(z.date())
+    .transform((val) => new Date(val))
+    .optional(),
+  reason: z.string().optional(),
+  status: z.enum(["pending", "approved", "rejected", "cancelled"]).optional(),
+});

@@ -38,8 +38,22 @@ export default function UserProfilePage() {
 
     setIsUpdating(true);
     try {
-      // Better Auth client updateUser or custom profile API
-      toast.success("Profile details saved successfully");
+      const parts = name.trim().split(/\s+/);
+      const firstName = parts[0] || "";
+      const lastName = parts.slice(1).join(" ") || "";
+
+      const res = await fetch("/api/v1/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName, lastName }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success("Profile details saved successfully");
+        refetch();
+      } else {
+        toast.error(data.error || "Failed to update profile");
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to update profile";
       toast.error(msg);

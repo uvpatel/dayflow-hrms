@@ -2,18 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import { getAuthContext } from "@/lib/auth-context";
 import { db } from "@/db";
-import { user } from "@/db/schema/auth-schema";
+import { user, employees } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function setRole(formData: FormData) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const ctx = await getAuthContext(await headers());
 
-  if (!session || session.user.role !== "admin") {
-    throw new Error("Unauthorized");
+  if (!ctx || ctx.role !== "admin") {
+    throw new Error("Unauthorized: Admin permission required");
   }
 
   const id = formData.get("id") as string;
@@ -23,6 +21,7 @@ export async function setRole(formData: FormData) {
     throw new Error("Missing id or role");
   }
 
+  // Update auth user table
   await db
     .update(user)
     .set({
@@ -31,16 +30,23 @@ export async function setRole(formData: FormData) {
     })
     .where(eq(user.id, id));
 
+  // Sync with employee record if linked
+  await db
+    .update(employees)
+    .set({
+      role,
+      updatedAt: new Date(),
+    })
+    .where(eq(employees.userId, id));
+
   revalidatePath("/admin");
 }
 
 export async function removeRole(formData: FormData) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const ctx = await getAuthContext(await headers());
 
-  if (!session || session.user.role !== "admin") {
-    throw new Error("Unauthorized");
+  if (!ctx || ctx.role !== "admin") {
+    throw new Error("Unauthorized: Admin permission required");
   }
 
   const id = formData.get("id") as string;
@@ -56,6 +62,14 @@ export async function removeRole(formData: FormData) {
       updatedAt: new Date(),
     })
     .where(eq(user.id, id));
+
+  await db
+    .update(employees)
+    .set({
+      role: "employee",
+      updatedAt: new Date(),
+    })
+    .where(eq(employees.userId, id));
 
   revalidatePath("/admin");
 }

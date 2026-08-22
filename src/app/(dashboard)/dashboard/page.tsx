@@ -111,8 +111,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Active Punch state (user "1")
-  const currentUserId = "1";
+  // Active Punch state
   const [userPunch, setUserPunch] = useState<AttendanceRecord | null>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
@@ -130,11 +129,11 @@ export default function DashboardPage() {
       const [empRes, attRes, leaveRes, deptRes, holRes, punchRes] =
         await Promise.all([
           fetch("/api/v1/employees?limit=50"),
-          fetch("/api/v1/attendence?limit=50"),
+          fetch("/api/v1/attendance?limit=50"),
           fetch("/api/v1/leave-requests?limit=50"),
           fetch("/api/v1/departments"),
           fetch("/api/v1/holidays"),
-          fetch(`/api/v1/attendence/check-in?userId=${currentUserId}`),
+          fetch("/api/v1/attendance/check-in"),
         ]);
 
       if (empRes.ok) {
@@ -182,10 +181,9 @@ export default function DashboardPage() {
   const handleCheckIn = async () => {
     try {
       setActionLoading(true);
-      const res = await fetch("/api/v1/attendence/check-in", {
+      const res = await fetch("/api/v1/attendance/check-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -206,10 +204,9 @@ export default function DashboardPage() {
   const handleCheckOut = async () => {
     try {
       setActionLoading(true);
-      const res = await fetch("/api/v1/attendence/check-out", {
+      const res = await fetch("/api/v1/attendance/check-out", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
       });
       const data = await res.json();
       if (res.ok && data.success) {

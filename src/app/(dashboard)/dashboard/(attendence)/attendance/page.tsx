@@ -88,12 +88,11 @@ export default function AttendancePage() {
   const [page, setPage] = useState(1);
   const limit = 10;
 
-  // Active user check-in state (user "1" as current session default)
-  const currentUserId = "1";
+  // Active user check-in state
   const [userCheckIn, setUserCheckIn] = useState<AttendanceRecord | null>(null);
 
   // Manual entry modal form state
-  const [manualUserId, setManualUserId] = useState("1");
+  const [manualUserId, setManualUserId] = useState("");
   const [manualDate, setManualDate] = useState(new Date().toISOString().split("T")[0]);
   const [manualCheckIn, setManualCheckIn] = useState("09:00");
   const [manualCheckOut, setManualCheckOut] = useState("18:00");
@@ -114,9 +113,9 @@ export default function AttendancePage() {
     try {
       setLoading(true);
       const [attRes, empRes, checkInRes] = await Promise.all([
-        fetch(`/api/v1/attendence?limit=50`),
-        fetch(`/api/v1/employees?limit=50`),
-        fetch(`/api/v1/attendence/check-in?userId=${currentUserId}`),
+        fetch("/api/v1/attendance?limit=50"),
+        fetch("/api/v1/employees?limit=50"),
+        fetch("/api/v1/attendance/check-in"),
       ]);
 
       if (attRes.ok) {
@@ -159,10 +158,9 @@ export default function AttendancePage() {
   const handleCheckIn = async () => {
     try {
       setActionLoading(true);
-      const res = await fetch("/api/v1/attendence/check-in", {
+      const res = await fetch("/api/v1/attendance/check-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -184,10 +182,9 @@ export default function AttendancePage() {
   const handleCheckOut = async () => {
     try {
       setActionLoading(true);
-      const res = await fetch("/api/v1/attendence/check-out", {
+      const res = await fetch("/api/v1/attendance/check-out", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUserId }),
       });
       const data = await res.json();
       if (res.ok && data.success) {

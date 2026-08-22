@@ -1,31 +1,6 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import {
-  AudioWaveform,
-  BookOpen,
-  Bot,
-  Command,
-  Frame,
-  GalleryVerticalEnd,
-  Map,
-  PieChart,
-  Settings2,
-  SquareTerminal,
-} from "lucide-react"
-
-import { NavMain } from "@/components/sidebar/navmain"
-import { NavProjects } from "@/components/sidebar/nav-project"
-import { NavUser } from "@/components/sidebar/nav-user"
-import { TeamSwitcher } from "@/components/sidebar/team-switcher"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarRail,
-} from "@/components/ui/sidebar"
-
+import * as React from "react";
 import {
   Users,
   CalendarCheck,
@@ -33,42 +8,72 @@ import {
   Wallet,
   CheckCircle2,
   Building2,
-
+  Settings2,
   LayoutDashboard,
-  UserPlus,
-  FileText,
-} from "lucide-react"
+} from "lucide-react";
 
-const data = {
-  user: {
-    name: "Urvil Patel",
-    email: "urvil@dayflow.app",
-    avatar: "/avatars/urvil.jpg",
-  },
-  teams: [
+import { NavMain } from "@/components/sidebar/navmain";
+import { NavUser } from "@/components/sidebar/nav-user";
+import { TeamSwitcher } from "@/components/sidebar/team-switcher";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarRail,
+} from "@/components/ui/sidebar";
+import { authClient } from "@/lib/auth-client";
+
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { data: session } = authClient.useSession();
+  const userRole = ((session?.user as { role?: string })?.role || "employee").toLowerCase();
+
+  const isAdmin = userRole === "admin";
+  const isHR = userRole === "hr" || isAdmin;
+  const isManager = userRole === "manager" || isHR;
+
+  const teams = [
     {
-      name: "Dayflow Employee",
+      name: isAdmin ? "Dayflow Admin" : isHR ? "Dayflow HR" : isManager ? "Dayflow Team" : "Dayflow HRMS",
       logo: Building2,
-      plan: "Enterprise",
+      plan: isAdmin ? "Enterprise Admin" : "Workforce",
     },
+  ];
+
+  // Dynamic role-aware navigation
+  const navMain = [
     {
-      name: "Dayflow Admin",
-      logo: Building2,
-      plan: "Enterprise",
-    },
-  ],
-  navMain: [
-    {
-      title: "People",
-      url: "/dashboard/people",
-      icon: Users,
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: LayoutDashboard,
       isActive: true,
       items: [
-        { title: "Directory", url: "/dashboard/people" },
-        { title: "Onboarding", url: "/dashboard/people/onboarding" },
-        { title: "Profile", url: "/dashboard/people/profile" },
+        { title: "Overview", url: "/dashboard" },
       ],
     },
+    ...(isHR
+      ? [
+          {
+            title: "People",
+            url: "/dashboard/people",
+            icon: Users,
+            items: [
+              { title: "Directory", url: "/dashboard/people" },
+              { title: "Onboarding", url: "/dashboard/people/onboarding" },
+              { title: "Profile", url: "/dashboard/people/profile" },
+            ],
+          },
+        ]
+      : [
+          {
+            title: "People",
+            url: "/dashboard/people/profile",
+            icon: Users,
+            items: [
+              { title: "My Profile", url: "/dashboard/people/profile" },
+            ],
+          },
+        ]),
     {
       title: "Attendance",
       url: "/dashboard/attendance",
@@ -76,7 +81,7 @@ const data = {
       items: [
         { title: "Daily View", url: "/dashboard/attendance/daily" },
         { title: "Weekly View", url: "/dashboard/attendance/weekly" },
-        { title: "Regularization", url: "/dashboard/attendance/regularize" },
+        { title: "Regularization", url: "/dashboard/attendance/regulize" },
       ],
     },
     {
@@ -89,62 +94,73 @@ const data = {
         { title: "Leave Balance", url: "/dashboard/time-off/balance" },
       ],
     },
-    {
-      title: "Approvals",
-      url: "/dashboard/approvals",
-      icon: CheckCircle2,
-      items: [
-        { title: "Leave Requests", url: "/dashboard/approvals/leave" },
-        { title: "Attendance Corrections", url: "/dashboard/approvals/attendance" },
-      ],
-    },
+    ...(isManager
+      ? [
+          {
+            title: "Approvals",
+            url: "/dashboard/approvels/leave",
+            icon: CheckCircle2,
+            items: [
+              { title: "Leave Requests", url: "/dashboard/approvels/leave" },
+            ],
+          },
+        ]
+      : []),
     {
       title: "Payroll",
       url: "/dashboard/payroll",
       icon: Wallet,
       items: [
         { title: "My Payslips", url: "/dashboard/payroll" },
-        { title: "Salary Structure", url: "/dashboard/payroll/structure" },
+        ...(isHR ? [{ title: "Salary Structure", url: "/dashboard/structured" }] : []),
       ],
     },
-    {
-      title: "Organization",
-      url: "/dashboard/organization",
-      icon: Building2,
-      items: [
-        { title: "Departments", url: "/dashboard/organization/departments" },
-        { title: "Roles", url: "/dashboard/organization/roles" },
-        { title: "Holidays", url: "/dashboard/organization/holidays" },
-      ],
-    },
+    ...(isHR
+      ? [
+          {
+            title: "Organization",
+            url: "/dashboard/organization",
+            icon: Building2,
+            items: [
+              { title: "Departments", url: "/dashboard/organization/departments" },
+              { title: "Roles", url: "/dashboard/roles" },
+              { title: "Holidays", url: "/dashboard/holidays" },
+            ],
+          },
+        ]
+      : [
+          {
+            title: "Organization",
+            url: "/dashboard/holidays",
+            icon: Building2,
+            items: [
+              { title: "Holidays", url: "/dashboard/holidays" },
+            ],
+          },
+        ]),
     {
       title: "Settings",
       url: "/dashboard/settings",
       icon: Settings2,
       items: [
         { title: "General", url: "/dashboard/settings" },
-        { title: "Team", url: "/dashboard/settings/team" },
         { title: "Billing", url: "/dashboard/settings/billing" },
       ],
     },
-  ],
- 
-}
+  ];
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <TeamSwitcher teams={teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
-       
+        <NavMain items={navMain} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  )
+  );
 }

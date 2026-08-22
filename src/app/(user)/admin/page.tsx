@@ -17,15 +17,19 @@ type AdminDashboardProps = {
   }>;
 };
 
+import { getAuthContext } from "@/lib/auth-context";
+
 export default async function AdminDashboard({
   searchParams,
 }: AdminDashboardProps) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const ctx = await getAuthContext(await headers());
 
-  if (!session) {
+  if (!ctx) {
     redirect("/sign-in");
+  }
+
+  if (ctx.role !== "admin") {
+    redirect("/dashboard");
   }
 
   const { search } = await searchParams;

@@ -23,14 +23,14 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Badge } from "@/components/ui/badge";
 import {
   ChevronsUpDownIcon,
-  SparklesIcon,
   BadgeCheckIcon,
-  CreditCardIcon,
-  BellIcon,
+  SettingsIcon,
   LogOutIcon,
   Loader2Icon,
+  ShieldIcon,
 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
@@ -54,6 +54,7 @@ interface UserProp {
   name?: string;
   email?: string;
   avatar?: string;
+  role?: string;
 }
 
 export function NavUser({
@@ -75,6 +76,7 @@ export function NavUser({
   const displayName = user?.name || user?.email?.split("@")[0] || "User";
   const displayEmail = user?.email || "";
   const displayAvatar = (user as { image?: string })?.image || fallbackUser?.avatar || "";
+  const displayRole = ((user as { role?: string })?.role || fallbackUser?.role || "Employee").toUpperCase();
   const initials = getInitials(user?.name, user?.email);
 
   const handleSignOut = async () => {
@@ -112,7 +114,9 @@ export function NavUser({
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{displayName}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="truncate font-medium">{displayName}</span>
+              </div>
               <span className="truncate text-xs text-muted-foreground">
                 {displayEmail}
               </span>
@@ -120,14 +124,14 @@ export function NavUser({
             <ChevronsUpDownIcon className="ml-auto size-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-56"
+            className="w-60"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
           >
             <DropdownMenuGroup>
               <DropdownMenuLabel className="p-0 font-normal">
-                <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                <div className="flex items-center gap-2 px-2 py-2 text-left text-sm">
                   <Avatar>
                     <AvatarImage src={displayAvatar} alt={displayName} />
                     <AvatarFallback>{initials}</AvatarFallback>
@@ -137,16 +141,15 @@ export function NavUser({
                     <span className="truncate text-xs text-muted-foreground">
                       {displayEmail}
                     </span>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="text-[10px] uppercase font-semibold py-0 px-1.5 h-4">
+                        <ShieldIcon className="mr-1 size-2.5" />
+                        {displayRole}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <SparklesIcon />
-                Upgrade to Pro
-              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
@@ -157,18 +160,18 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheckIcon />
-                <Link href="/dashboard/people/profile">Profile</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCardIcon />
-                <Link href="/dashboard/settings/billing">Billing</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellIcon />
-                <Link href="/dashboard/notifications">Notifications</Link>
-              </DropdownMenuItem>
+              <Link href="/dashboard/people/profile" className="w-full">
+                <DropdownMenuItem className="flex items-center gap-2 w-full cursor-pointer">
+                  <BadgeCheckIcon className="size-4" />
+                  <span>My Profile</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/dashboard/settings" className="w-full">
+                <DropdownMenuItem className="flex items-center gap-2 w-full cursor-pointer">
+                  <SettingsIcon className="size-4" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+              </Link>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -177,11 +180,11 @@ export function NavUser({
               className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
             >
               {isLoggingOut ? (
-                <Loader2Icon className="animate-spin" />
+                <Loader2Icon className="size-4 animate-spin" />
               ) : (
-                <LogOutIcon />
+                <LogOutIcon className="size-4" />
               )}
-              {isLoggingOut ? "Signing out..." : "Sign Out"}
+              <span>{isLoggingOut ? "Signing out..." : "Sign Out"}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

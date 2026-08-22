@@ -1,43 +1,55 @@
-import { NextRequest } from "next/server";
-import { organizationService } from "@/features/organization/organization.service";
-import { createOrganizationSchema } from "@/features/organization/organization.schemas";
-import {
-  createdResponse,
-  errorResponse,
-  paginatedResponse,
-  parsePagination,
-  buildPaginationMeta,
-  validateBody,
-} from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, requirePermission } from "@/lib/auth-context";
+import { db } from "@/db";
+import { organizations } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
+  const { error, ctx } = await requireAuth(request.headers);
+  if (error || !ctx) return error!;
+
   try {
-    const authContext = await getAuthContext(request);
-    requirePermission(authContext, "org:read");
+    const whereClause = ctx.organizationId ? eq(organizations.id, ctx.organizationId) : undefined;
+    const data = await db.select().from(organizations).where(whereClause);
 
-    const { searchParams } = new URL(request.url);
-    const { page, limit, offset, search } = parsePagination(searchParams);
-
-    const items = await organizationService.listOrganizations(limit, offset, search);
-    const meta = buildPaginationMeta(page, limit, items.length, { search });
-
-    return paginatedResponse(items, meta, "Organizations fetched successfully");
-  } catch (error) {
-    return errorResponse(error);
+    return NextResponse.json({
+      success: true,
+      data,
+    });
+  } catch (err) {
+    console.error("Error fetching organization:", err);
+    return NextResponse.json({ success: false, error: "Failed to fetch organization" }, { status: 500 });
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function PATCH(request: NextRequest) {
+  const { error, ctx } = await requirePermission("organization:manage", request.headers);
+  if (error || !ctx) return error!;
+
+  if (!ctx.organizationId) {
+    return NextResponse.json({ success: false, error: "Organization not found" }, { status: 404 });
+  }
+
   try {
-    const authContext = await getAuthContext(request);
-    requirePermission(authContext, "org:manage");
+    const body = await request.json();
+    const updateData: Record<string, any> = { updatedAt: new Date() };
 
-    const data = await validateBody(request, createOrganizationSchema);
-    const created = await organizationService.createOrganization(data);
+    if (body.name && body.name.trim()) updateData.name = body.name.trim();
+    if (body.description !== undefined) updateData.description = body.description;
 
-    return createdResponse(created, "Organization created successfully");
-  } catch (error) {
-    return errorResponse(error);
+    const [updated] = await db
+      .update(organizations)
+      .set(updateData)
+      .where(eq(organizations.id, ctx.organizationId))
+      .returning();
+
+    return NextResponse.json({
+      success: true,
+      message: "Organization updated successfully",
+      data: updated,
+    });
+  } catch (err) {
+    console.error("Error updating organization:", err);
+    return NextResponse.json({ success: false, error: "Failed to update organization" }, { status: 500 });
   }
 }

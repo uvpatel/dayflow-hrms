@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = getSessionCookie(request);
 
@@ -16,8 +16,7 @@ export function middleware(request: NextRequest) {
   // Protected areas: redirect unauthenticated users to /sign-in
   if (pathname.startsWith("/dashboard") || pathname.startsWith("/admin")) {
     if (!sessionCookie) {
-      const signInUrl = new URL("/sign-in", request.url);
-      return NextResponse.redirect(signInUrl);
+      return NextResponse.redirect(new URL("/sign-in", request.url));
     }
   }
 
