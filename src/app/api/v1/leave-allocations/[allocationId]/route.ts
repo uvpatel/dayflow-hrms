@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:read:self");
 
     const { allocationId } = await validateParams(params, allocationIdParamSchema);
-    const item = await timeOffService.getAllocation(allocationId);
+    const item = await timeOffService.getAllocationForActor(authContext, allocationId);
 
     return successResponse(item, undefined, `Leave allocation ${allocationId} fetched successfully`);
   } catch (error) {
@@ -44,7 +44,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { allocationId } = await validateParams(params, allocationIdParamSchema);
     const data = await validateBody(request, updateLeaveAllocationSchema);
-    const updated = await timeOffService.updateAllocation(allocationId, data);
+    const updated = await timeOffService.updateAllocation(
+      authContext,
+      allocationId,
+      data,
+    );
 
     return successResponse(updated, undefined, `Leave allocation ${allocationId} updated successfully`);
   } catch (error) {
@@ -58,7 +62,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:manage");
 
     const { allocationId } = await validateParams(params, allocationIdParamSchema);
-    const deleted = await timeOffService.deleteAllocation(allocationId);
+    const deleted = await timeOffService.deleteAllocation(authContext, allocationId);
 
     return successResponse(deleted, undefined, `Leave allocation ${allocationId} deleted successfully`);
   } catch (error) {

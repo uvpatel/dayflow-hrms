@@ -8,7 +8,11 @@ import {
   validateBody,
   validateParams,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 const salaryStructureIdParamSchema = z.object({
   salaryStructureId: z
@@ -27,9 +31,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { salaryStructureId } = await validateParams(params, salaryStructureIdParamSchema);
-    const item = await payrollService.getStructure(salaryStructureId);
+    const item = await payrollService.getStructure(organizationId, salaryStructureId);
 
     return successResponse(item, undefined, `Salary structure ${salaryStructureId} fetched successfully`);
   } catch (error) {
@@ -41,10 +46,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { salaryStructureId } = await validateParams(params, salaryStructureIdParamSchema);
     const data = await validateBody(request, updateSalaryStructureSchema);
-    const updated = await payrollService.updateStructure(salaryStructureId, data);
+    const updated = await payrollService.updateStructure(
+      organizationId,
+      salaryStructureId,
+      data,
+    );
 
     return successResponse(updated, undefined, `Salary structure ${salaryStructureId} updated successfully`);
   } catch (error) {
@@ -56,9 +66,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { salaryStructureId } = await validateParams(params, salaryStructureIdParamSchema);
-    const deleted = await payrollService.deleteStructure(salaryStructureId);
+    const deleted = await payrollService.deleteStructure(
+      organizationId,
+      salaryStructureId,
+    );
 
     return successResponse(deleted, undefined, `Salary structure ${salaryStructureId} deleted successfully`);
   } catch (error) {

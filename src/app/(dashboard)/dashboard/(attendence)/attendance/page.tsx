@@ -96,7 +96,7 @@ export default function AttendancePage() {
   const { data: attendanceData, isLoading, isError, error, refetch } = useAttendance({ limit: 100 });
   const { data: employeesData } = useEmployees({ limit: 100 });
   const { data: me } = useMe();
-  const role = (me?.user.role ?? me?.employee?.role ?? "employee").toLowerCase();
+  const role = (me?.employee?.role ?? me?.user.role ?? "employee").toLowerCase();
   const canManageAttendance = role === "hr" || role === "admin";
   const checkInMutation = useCheckIn();
   const checkOutMutation = useCheckOut();

@@ -73,6 +73,46 @@ export function calculateRequestedDays(
   return calendarDays;
 }
 
+export function calculateWorkingLeaveDays(
+  startDate: Date,
+  endDate: Date,
+  unit: LeaveUnit,
+  weekdays: readonly number[] = [1, 2, 3, 4, 5],
+  holidayDates: ReadonlySet<string> = new Set<string>(),
+): number {
+  if (
+    !Number.isFinite(startDate.getTime()) ||
+    !Number.isFinite(endDate.getTime())
+  ) {
+    throw new Error("Leave dates must be valid");
+  }
+
+  const startDay = utcCalendarDay(startDate);
+  const endDay = utcCalendarDay(endDate);
+  if (endDay < startDay) {
+    throw new Error("End date cannot be earlier than start date");
+  }
+  if (unit === "half_day" && startDay !== endDay) {
+    throw new Error("Half-day leave must start and end on the same day");
+  }
+
+  const allowedWeekdays = new Set(weekdays);
+  let workingDays = 0;
+  for (let day = startDay; day <= endDay; day += 86_400_000) {
+    const date = new Date(day);
+    const isoWeekday = date.getUTCDay() === 0 ? 7 : date.getUTCDay();
+    const dateKey = date.toISOString().slice(0, 10);
+    if (allowedWeekdays.has(isoWeekday) && !holidayDates.has(dateKey)) {
+      workingDays += 1;
+    }
+  }
+  if (workingDays === 0) {
+    throw new Error("Leave range does not contain a scheduled working day");
+  }
+  if (unit === "half_day") return 0.5;
+  return workingDays;
+}
+
 export function assertSufficientLeaveBalance(
   allocatedDays: number,
   usedDays: number,

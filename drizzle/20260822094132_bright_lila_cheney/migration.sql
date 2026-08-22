@@ -1,0 +1,1 @@
+ALTER TABLE "activity_logs" DROP CONSTRAINT "activity_logs_organization_id_organizations_id_fkey", ADD CONSTRAINT "activity_logs_organization_id_organizations_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE RESTRICT;

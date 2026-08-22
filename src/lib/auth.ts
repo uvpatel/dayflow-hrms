@@ -2,8 +2,11 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins/admin";
 import { db } from "@/db";
+import { employees } from "@/db/schema/employees";
 import * as schema from "@/db/schema/auth-schema";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email/service";
+import { and, eq, isNull } from "drizzle-orm";
+import { z } from "zod";
 
 const isProduction = process.env.NODE_ENV === "production";
 const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
@@ -98,6 +101,60 @@ export const auth = betterAuth({
     expiresIn: 60 * 60,
     sendVerificationEmail: async ({ user, url }) => {
       await sendVerificationEmail(user.email, url, user.name);
+    },
+  },
+  user: {
+    additionalFields: {
+      employeeNumber: {
+        type: "string",
+        required: false,
+        input: true,
+        returned: true,
+        fieldName: "employee_number",
+        transform: {
+          input: (value) =>
+            typeof value === "string" ? value.trim().toUpperCase() : value,
+        },
+        validator: {
+          input: z.string().trim().min(2).max(64),
+        },
+      },
+    },
+    validateUserInfo: async ({ user, source }) => {
+      if (source.action !== "create-user") return;
+      if (source.method !== "email-password" && source.method !== "oauth") return;
+
+      const email = typeof user.email === "string" ? user.email.toLowerCase() : "";
+      const employeeNumber =
+        typeof user.employeeNumber === "string"
+          ? user.employeeNumber.trim().toUpperCase()
+          : "";
+      const conditions = [
+        eq(employees.email, email),
+        isNull(employees.userId),
+      ];
+      if (source.method === "email-password") {
+        if (!employeeNumber) {
+          return {
+            error: "EMPLOYEE_ID_REQUIRED",
+            errorDescription: "A valid pre-issued employee ID is required.",
+          };
+        }
+        conditions.push(eq(employees.employeeNumber, employeeNumber));
+      }
+
+      const [eligibleEmployee] = await db
+        .select({ id: employees.id })
+        .from(employees)
+        .where(and(...conditions))
+        .limit(1);
+      if (!eligibleEmployee) {
+        return {
+          error: "EMPLOYEE_ID_MISMATCH",
+          errorDescription:
+            "The employee ID and email do not match an available employee record.",
+        };
+      }
     },
   },
   plugins: [

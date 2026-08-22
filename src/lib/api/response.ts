@@ -43,15 +43,41 @@ export function noContentResponse() {
   return new NextResponse(null, { status: 204 });
 }
 
+function validationFields(
+  details: unknown,
+): Record<string, string[]> | undefined {
+  if (!Array.isArray(details)) return undefined;
+
+  const fields: Record<string, string[]> = {};
+  for (const detail of details) {
+    if (
+      typeof detail !== "object" ||
+      detail === null ||
+      !("message" in detail) ||
+      typeof detail.message !== "string"
+    ) {
+      continue;
+    }
+    const path =
+      "path" in detail && typeof detail.path === "string" && detail.path
+        ? detail.path
+        : "_root";
+    fields[path] = [...(fields[path] ?? []), detail.message];
+  }
+  return Object.keys(fields).length ? fields : undefined;
+}
+
 export function errorResponse(error: unknown) {
   if (error instanceof ZodError) {
     const formatted = formatZodError(error);
     return NextResponse.json(
       {
         success: false,
-        error: "Validation failed",
-        code: "VALIDATION_ERROR",
-        details: formatted,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Validation failed",
+          fields: validationFields(formatted),
+        },
       },
       { status: 400 }
     );
@@ -61,20 +87,26 @@ export function errorResponse(error: unknown) {
     return NextResponse.json(
       {
         success: false,
-        error: error.message,
-        code: error.code,
-        ...(error.details !== undefined && { details: error.details }),
+        error: {
+          code: error.code,
+          message: error.message,
+          ...(validationFields(error.details) && {
+            fields: validationFields(error.details),
+          }),
+        },
       },
       { status: error.statusCode }
     );
   }
 
-  const message = error instanceof Error ? error.message : "Internal server error";
+  console.error("Unhandled API error", error);
   return NextResponse.json(
     {
       success: false,
-      error: message,
-      code: "INTERNAL_SERVER_ERROR",
+      error: {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Internal server error",
+      },
     },
     { status: 500 }
   );

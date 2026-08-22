@@ -4,9 +4,25 @@ import {
   leavePolicies,
   leaveAllocations,
   leaveRequests,
-  approvalRequests,
+  employees,
+  holidays,
+  workSchedules,
 } from "@/db/schema";
-import { and, count, desc, eq, lte, gte, inArray, isNull, or, type SQL } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql as drizzleSql,
+  type SQL,
+} from "drizzle-orm";
 import {
   NewLeaveType,
   NewLeavePolicy,
@@ -15,12 +31,13 @@ import {
 } from "./time-off.types";
 
 export interface LeaveRequestScope {
-  organizationId?: number | null;
+  organizationId: number;
   employeeIds?: number[];
   status?: string;
 }
 
 export interface AtomicLeaveSubmission {
+  leaveTypeId: number;
   employeeId: number;
   organizationId: number;
   leaveType: string;
@@ -36,11 +53,13 @@ export interface AtomicLeaveDecision {
   actorEmployeeId: number;
   actorRole: string;
   organizationId: number;
+  leaveTypeId: number;
   decision: "approved" | "rejected";
   comment: string | null;
 }
 
 export interface AtomicLeaveUpdate {
+  leaveTypeId: number;
   requestId: number;
   employeeId: number;
   organizationId: number;
@@ -58,34 +77,46 @@ interface IdRow {
 
 export class TimeOffRepository {
   // Leave Types
-  async findLeaveTypes(limit = 50, offset = 0) {
+  async findLeaveTypes(organizationId: number, limit = 50, offset = 0) {
     return await db
       .select()
       .from(leaveTypes)
+      .where(or(
+        eq(leaveTypes.organizationId, organizationId),
+        isNull(leaveTypes.organizationId),
+      ))
       .orderBy(desc(leaveTypes.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findLeaveTypeById(id: number) {
-    const [item] = await db.select().from(leaveTypes).where(eq(leaveTypes.id, id));
+  async findLeaveTypeById(organizationId: number, id: number) {
+    const [item] = await db.select().from(leaveTypes).where(and(
+      eq(leaveTypes.id, id),
+      or(
+        eq(leaveTypes.organizationId, organizationId),
+        isNull(leaveTypes.organizationId),
+      ),
+    ));
     return item ?? null;
   }
 
-  async findLeaveTypeByName(name: string, organizationId: number | null) {
-    const conditions = [eq(leaveTypes.name, name)];
-    if (organizationId) {
-      conditions.push(
-        or(
-          eq(leaveTypes.organizationId, organizationId),
-          isNull(leaveTypes.organizationId),
-        )!,
-      );
-    }
+  async findLeaveTypeByName(name: string, organizationId: number) {
+    const conditions = [
+      eq(leaveTypes.name, name),
+      or(
+        eq(leaveTypes.organizationId, organizationId),
+        isNull(leaveTypes.organizationId),
+      )!,
+    ];
     const items = await db
       .select()
       .from(leaveTypes)
       .where(and(...conditions))
+      .orderBy(
+        drizzleSql`case when ${leaveTypes.organizationId} = ${organizationId} then 0 else 1 end`,
+        asc(leaveTypes.id),
+      )
       .limit(1);
     return items[0] ?? null;
   }
@@ -95,32 +126,42 @@ export class TimeOffRepository {
     return created;
   }
 
-  async updateLeaveType(id: number, data: Partial<NewLeaveType>) {
+  async updateLeaveType(organizationId: number, id: number, data: Partial<NewLeaveType>) {
     const [updated] = await db
       .update(leaveTypes)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(leaveTypes.id, id))
+      .where(and(
+        eq(leaveTypes.id, id),
+        eq(leaveTypes.organizationId, organizationId),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async deleteLeaveType(id: number) {
-    const [deleted] = await db.delete(leaveTypes).where(eq(leaveTypes.id, id)).returning();
+  async deleteLeaveType(organizationId: number, id: number) {
+    const [deleted] = await db.delete(leaveTypes).where(and(
+      eq(leaveTypes.id, id),
+      eq(leaveTypes.organizationId, organizationId),
+    )).returning();
     return deleted ?? null;
   }
 
   // Leave Policies
-  async findLeavePolicies(limit = 50, offset = 0) {
+  async findLeavePolicies(organizationId: number, limit = 50, offset = 0) {
     return await db
       .select()
       .from(leavePolicies)
+      .where(eq(leavePolicies.organizationId, organizationId))
       .orderBy(desc(leavePolicies.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findLeavePolicyById(id: number) {
-    const [item] = await db.select().from(leavePolicies).where(eq(leavePolicies.id, id));
+  async findLeavePolicyById(organizationId: number, id: number) {
+    const [item] = await db.select().from(leavePolicies).where(and(
+      eq(leavePolicies.id, id),
+      eq(leavePolicies.organizationId, organizationId),
+    ));
     return item ?? null;
   }
 
@@ -129,34 +170,56 @@ export class TimeOffRepository {
     return created;
   }
 
-  async updateLeavePolicy(id: number, data: Partial<NewLeavePolicy>) {
+  async updateLeavePolicy(organizationId: number, id: number, data: Partial<NewLeavePolicy>) {
     const [updated] = await db
       .update(leavePolicies)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(leavePolicies.id, id))
+      .where(and(
+        eq(leavePolicies.id, id),
+        eq(leavePolicies.organizationId, organizationId),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async deleteLeavePolicy(id: number) {
-    const [deleted] = await db.delete(leavePolicies).where(eq(leavePolicies.id, id)).returning();
+  async deleteLeavePolicy(organizationId: number, id: number) {
+    const [deleted] = await db.delete(leavePolicies).where(and(
+      eq(leavePolicies.id, id),
+      eq(leavePolicies.organizationId, organizationId),
+    )).returning();
     return deleted ?? null;
   }
 
   // Allocations
-  async findAllocations(limit = 50, offset = 0, employeeId?: number) {
-    const where = employeeId ? eq(leaveAllocations.employeeId, employeeId) : undefined;
+  async findAllocations(
+    organizationId: number,
+    limit = 50,
+    offset = 0,
+    employeeIds?: number[],
+  ) {
+    if (employeeIds?.length === 0) return [];
     return await db
-      .select()
+      .select({ ...getTableColumns(leaveAllocations) })
       .from(leaveAllocations)
-      .where(where)
+      .innerJoin(employees, eq(employees.id, leaveAllocations.employeeId))
+      .where(and(
+        eq(employees.organizationId, organizationId),
+        employeeIds ? inArray(leaveAllocations.employeeId, employeeIds) : undefined,
+      ))
       .orderBy(desc(leaveAllocations.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findAllocationById(id: number) {
-    const [item] = await db.select().from(leaveAllocations).where(eq(leaveAllocations.id, id));
+  async findAllocationById(organizationId: number, id: number) {
+    const [item] = await db
+      .select({ ...getTableColumns(leaveAllocations) })
+      .from(leaveAllocations)
+      .innerJoin(employees, eq(employees.id, leaveAllocations.employeeId))
+      .where(and(
+        eq(leaveAllocations.id, id),
+        eq(employees.organizationId, organizationId),
+      ));
     return item ?? null;
   }
 
@@ -169,32 +232,75 @@ export class TimeOffRepository {
     return item ?? null;
   }
 
+  async findEmployeeSchedule(employeeId: number, scheduleId: number | null) {
+    if (!scheduleId) return null;
+    const [schedule] = await db
+      .select()
+      .from(workSchedules)
+      .where(and(
+        eq(workSchedules.id, scheduleId),
+        eq(workSchedules.employeeId, employeeId),
+      ))
+      .limit(1);
+    return schedule ?? null;
+  }
+
+  async findHolidayDateKeys(
+    organizationId: number,
+    startDate: Date,
+    endDate: Date,
+  ) {
+    const rows = await db
+      .select({ holidayDate: holidays.holidayDate })
+      .from(holidays)
+      .where(and(
+        eq(holidays.organizationId, organizationId),
+        gte(holidays.holidayDate, startDate),
+        lte(holidays.holidayDate, endDate),
+      ));
+    return rows.map((row) => row.holidayDate.toISOString().slice(0, 10));
+  }
+
   async createAllocation(data: NewLeaveAllocation) {
     const [created] = await db.insert(leaveAllocations).values(data).returning();
     return created;
   }
 
-  async updateAllocation(id: number, data: Partial<NewLeaveAllocation>) {
+  async updateAllocation(organizationId: number, id: number, data: Partial<NewLeaveAllocation>) {
     const [updated] = await db
       .update(leaveAllocations)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(leaveAllocations.id, id))
+      .where(and(
+        eq(leaveAllocations.id, id),
+        inArray(
+          leaveAllocations.employeeId,
+          db.select({ id: employees.id }).from(employees).where(
+            eq(employees.organizationId, organizationId),
+          ),
+        ),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async deleteAllocation(id: number) {
-    const [deleted] = await db.delete(leaveAllocations).where(eq(leaveAllocations.id, id)).returning();
+  async deleteAllocation(organizationId: number, id: number) {
+    const [deleted] = await db.delete(leaveAllocations).where(and(
+      eq(leaveAllocations.id, id),
+      inArray(
+        leaveAllocations.employeeId,
+        db.select({ id: employees.id }).from(employees).where(
+          eq(employees.organizationId, organizationId),
+        ),
+      ),
+    )).returning();
     return deleted ?? null;
   }
 
   // Requests
-  async findRequests(limit = 20, offset = 0, scope: LeaveRequestScope = {}) {
+  async findRequests(limit: number, offset: number, scope: LeaveRequestScope) {
     if (scope.employeeIds?.length === 0) return [];
     const conditions: SQL[] = [];
-    if (scope.organizationId) {
-      conditions.push(eq(leaveRequests.organizationId, scope.organizationId));
-    }
+    conditions.push(eq(leaveRequests.organizationId, scope.organizationId));
     if (scope.employeeIds) {
       conditions.push(inArray(leaveRequests.employeeId, scope.employeeIds));
     }
@@ -211,12 +317,10 @@ export class TimeOffRepository {
       .offset(offset);
   }
 
-  async countRequests(scope: LeaveRequestScope = {}): Promise<number> {
+  async countRequests(scope: LeaveRequestScope): Promise<number> {
     if (scope.employeeIds?.length === 0) return 0;
     const conditions: SQL[] = [];
-    if (scope.organizationId) {
-      conditions.push(eq(leaveRequests.organizationId, scope.organizationId));
-    }
+    conditions.push(eq(leaveRequests.organizationId, scope.organizationId));
     if (scope.employeeIds) {
       conditions.push(inArray(leaveRequests.employeeId, scope.employeeIds));
     }
@@ -261,33 +365,28 @@ export class TimeOffRepository {
     const transactionResults = await neonSql.transaction((transactionSql) => [
       transactionSql`select pg_advisory_xact_lock(${data.employeeId})`,
       transactionSql`
-        with candidate as (
+        with resolved_leave_type as materialized (
+          select leave_type.id, leave_type.name, leave_type.requires_balance
+          from leave_types as leave_type
+          where leave_type.id = ${data.leaveTypeId}
+            and leave_type.name = ${data.leaveType}
+            and leave_type.active
+            and (
+              leave_type.organization_id = ${data.organizationId}
+              or leave_type.organization_id is null
+            )
+        ), candidate as (
           select
             ${data.employeeId}::integer as employee_id,
             ${data.organizationId}::integer as organization_id,
-            ${data.leaveType}::text as leave_type,
+            resolved_leave_type.name as leave_type,
             ${data.startDate.toISOString()}::timestamptz as start_date,
             ${data.endDate.toISOString()}::timestamptz as end_date,
             ${data.days}::numeric(7,2) as days,
             ${data.unit}::text as unit,
             ${data.reason}::text as reason,
-            case
-              when lower(${data.leaveType}) like '%unpaid%' then false
-              else coalesce(
-                (
-                  select leave_type.requires_balance
-                  from leave_types as leave_type
-                  where leave_type.name = ${data.leaveType}
-                    and (
-                      leave_type.organization_id = ${data.organizationId}
-                      or leave_type.organization_id is null
-                    )
-                  order by leave_type.organization_id nulls last
-                  limit 1
-                ),
-                true
-              )
-            end as requires_balance
+            resolved_leave_type.requires_balance
+          from resolved_leave_type
         ), inserted as (
           insert into leave_requests (
             employee_id,
@@ -334,35 +433,6 @@ export class TimeOffRepository {
               )
             )
           returning *
-        ), approval_write as (
-          insert into approval_requests (
-            requestor_id,
-            approver_id,
-            status,
-            created_at,
-            updated_at
-          )
-          select
-            inserted.employee_id,
-            coalesce(
-              employee.manager_id,
-              (
-                select approver.id
-                from employees as approver
-                where approver.organization_id = inserted.organization_id
-                  and approver.role in ('hr', 'admin')
-                  and approver.employment_status = 'active'
-                order by case when approver.role = 'hr' then 0 else 1 end, approver.id
-                limit 1
-              ),
-              inserted.employee_id
-            ),
-            'pending',
-            now(),
-            now()
-          from inserted
-          join employees as employee on employee.id = inserted.employee_id
-          returning id
         ), notification_write as (
           insert into notifications (user_id, message, read, created_at, updated_at)
           select
@@ -374,8 +444,15 @@ export class TimeOffRepository {
           from inserted
           returning id
         ), audit_write as (
-          insert into activity_logs (action, description, created_at, updated_at)
+          insert into activity_logs (
+            organization_id,
+            action,
+            description,
+            created_at,
+            updated_at
+          )
           select
+            inserted.organization_id,
             'LEAVE_REQUESTED',
             'Employee #' || inserted.employee_id || ' submitted leave request #' || inserted.id,
             now(),
@@ -398,25 +475,17 @@ export class TimeOffRepository {
       with target as materialized (
         select
           request.*,
-          case
-            when lower(request.leave_type) like '%unpaid%' then false
-            else coalesce(
-              (
-                select leave_type.requires_balance
-                from leave_types as leave_type
-                where leave_type.name = request.leave_type
-                  and (
-                    leave_type.organization_id = request.organization_id
-                    or leave_type.organization_id is null
-                  )
-                order by leave_type.organization_id nulls last
-                limit 1
-              ),
-              true
-            )
-          end as requires_balance
+          leave_type.requires_balance
         from leave_requests as request
         join employees as subject on subject.id = request.employee_id
+        join leave_types as leave_type
+          on leave_type.id = ${input.leaveTypeId}
+          and leave_type.name = request.leave_type
+          and leave_type.active
+          and (
+            leave_type.organization_id = request.organization_id
+            or leave_type.organization_id is null
+          )
         where request.id = ${input.requestId}
           and request.status = 'pending'
           and request.organization_id = ${input.organizationId}
@@ -483,8 +552,15 @@ export class TimeOffRepository {
         from decision_write
         returning id
       ), audit_write as (
-        insert into activity_logs (action, description, created_at, updated_at)
+        insert into activity_logs (
+          organization_id,
+          action,
+          description,
+          created_at,
+          updated_at
+        )
         select
+          decision_write.organization_id,
           case
             when decision_write.status = 'approved' then 'LEAVE_APPROVED'
             else 'LEAVE_REJECTED'
@@ -520,7 +596,9 @@ export class TimeOffRepository {
           now()
         from decision_write
         join employees as subject on subject.id = decision_write.employee_id
-        left join work_schedules as schedule on schedule.id = subject.work_schedule_id
+        left join work_schedules as schedule
+          on schedule.id = subject.work_schedule_id
+          and schedule.employee_id = subject.id
         cross join lateral generate_series(
           decision_write.start_date::date,
           decision_write.end_date::date,
@@ -529,6 +607,12 @@ export class TimeOffRepository {
         where decision_write.status = 'approved'
           and extract(isodow from work_day)::integer = any(
             string_to_array(coalesce(schedule.weekdays, '1,2,3,4,5'), ',')::integer[]
+          )
+          and not exists (
+            select 1
+            from holidays as holiday
+            where holiday.organization_id = decision_write.organization_id
+              and holiday.holiday_date::date = work_day::date
           )
         on conflict (employee_id, work_date)
           where employee_id is not null and work_date is not null
@@ -571,8 +655,15 @@ export class TimeOffRepository {
         from cancelled
         returning id
       ), audit_write as (
-        insert into activity_logs (action, description, created_at, updated_at)
+        insert into activity_logs (
+          organization_id,
+          action,
+          description,
+          created_at,
+          updated_at
+        )
         select
+          cancelled.organization_id,
           'LEAVE_CANCELLED',
           'Employee #' || cancelled.employee_id || ' cancelled leave request #' || cancelled.id,
           now(),
@@ -596,35 +687,29 @@ export class TimeOffRepository {
     const transactionResults = await neonSql.transaction((transactionSql) => [
       transactionSql`select pg_advisory_xact_lock(${data.employeeId})`,
       transactionSql`
-        with candidate as (
+        with resolved_leave_type as materialized (
+          select leave_type.id, leave_type.name, leave_type.requires_balance
+          from leave_types as leave_type
+          where leave_type.id = ${data.leaveTypeId}
+            and leave_type.name = ${data.leaveType}
+            and leave_type.active
+            and (
+              leave_type.organization_id = ${data.organizationId}
+              or leave_type.organization_id is null
+            )
+        ), candidate as (
           select
             ${data.requestId}::integer as request_id,
             ${data.employeeId}::integer as employee_id,
             ${data.organizationId}::integer as organization_id,
-            ${data.leaveType}::text as leave_type,
+            resolved_leave_type.name as leave_type,
             ${data.startDate.toISOString()}::timestamptz as start_date,
             ${data.endDate.toISOString()}::timestamptz as end_date,
             ${data.days}::numeric(7,2) as days,
             ${data.unit}::text as unit,
             ${data.reason}::text as reason,
-            case
-              when lower(${data.leaveType}) like '%unpaid%' then false
-              else coalesce(
-                (
-                  select leave_type.requires_balance
-                  from leave_types as leave_type
-                  where leave_type.name = ${data.leaveType}
-                    and leave_type.active
-                    and (
-                      leave_type.organization_id = ${data.organizationId}
-                      or leave_type.organization_id is null
-                    )
-                  order by leave_type.organization_id nulls last
-                  limit 1
-                ),
-                true
-              )
-            end as requires_balance
+            resolved_leave_type.requires_balance
+          from resolved_leave_type
         ), eligible as materialized (
           select request.id
           from leave_requests as request
@@ -677,8 +762,15 @@ export class TimeOffRepository {
           from updated
           returning id
         ), audit_write as (
-          insert into activity_logs (action, description, created_at, updated_at)
+          insert into activity_logs (
+            organization_id,
+            action,
+            description,
+            created_at,
+            updated_at
+          )
           select
+            updated.organization_id,
             'LEAVE_REQUEST_UPDATED',
             'Employee #' || updated.employee_id || ' updated leave request #' || updated.id,
             now(),
@@ -707,18 +799,6 @@ export class TimeOffRepository {
   async deleteRequest(id: number) {
     const [deleted] = await db.delete(leaveRequests).where(eq(leaveRequests.id, id)).returning();
     return deleted ?? null;
-  }
-
-  async createApprovalRequest(requestorId: number, approverId: number, status = "pending") {
-    const [created] = await db
-      .insert(approvalRequests)
-      .values({
-        requestorId,
-        approverId,
-        status,
-      })
-      .returning();
-    return created;
   }
 }
 

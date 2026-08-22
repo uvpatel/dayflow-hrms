@@ -1,3 +1,87 @@
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1 FROM "employees"
+		GROUP BY lower("email") HAVING count(*) > 1
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: duplicate employee emails must be reconciled before migration';
+	END IF;
+	IF EXISTS (
+		SELECT 1 FROM "employees"
+		WHERE "employee_number" IS NOT NULL
+		GROUP BY "employee_number" HAVING count(*) > 1
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: duplicate employee numbers must be reconciled before migration';
+	END IF;
+	IF EXISTS (
+		SELECT 1 FROM "leave_allocations"
+		GROUP BY "employee_id", "leave_type" HAVING count(*) > 1
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: duplicate leave allocations must be merged before migration';
+	END IF;
+	IF EXISTS (
+		SELECT 1 FROM "attendances"
+		WHERE "employee_id" IS NOT NULL
+			AND "check_in_time" IS NOT NULL
+			AND "check_out_time" IS NULL
+		GROUP BY "employee_id" HAVING count(*) > 1
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: employees with multiple open attendance records must be reconciled before migration';
+	END IF;
+	IF EXISTS (
+		SELECT 1 FROM "leave_allocations"
+		WHERE CASE
+			WHEN "allocated_days"::text ~ '^-?[0-9]+([.][0-9]+)?$'
+				AND "used_days"::text ~ '^-?[0-9]+([.][0-9]+)?$'
+			THEN "allocated_days"::numeric < 0
+				OR "used_days"::numeric < 0
+				OR "used_days"::numeric > "allocated_days"::numeric
+			ELSE true
+		END
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: invalid leave allocation values must be corrected before migration';
+	END IF;
+	IF EXISTS (
+		SELECT 1 FROM "payslips"
+		WHERE CASE
+			WHEN ("basic_salary" IS NULL OR "basic_salary"::text ~ '^-?[0-9]+([.][0-9]+)?$')
+				AND ("net_salary" IS NULL OR "net_salary"::text ~ '^-?[0-9]+([.][0-9]+)?$')
+			THEN ("basic_salary" IS NOT NULL AND "basic_salary"::numeric < 0)
+				OR ("net_salary" IS NOT NULL AND "net_salary"::numeric < 0)
+				OR "status" NOT IN ('draft', 'calculated', 'reviewed', 'published', 'void')
+			ELSE true
+		END
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: invalid legacy payslip money or status values must be corrected before migration';
+	END IF;
+	IF EXISTS (
+		SELECT 1 FROM "payroll_periods"
+		WHERE "status" NOT IN ('draft', 'calculating', 'review', 'finalized', 'published')
+			OR ("start_date" IS NOT NULL AND "end_date" IS NOT NULL AND "end_date" < "start_date")
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: invalid payroll period dates or statuses must be corrected before migration';
+	END IF;
+	IF EXISTS (
+		SELECT 1
+		FROM (
+			SELECT
+				CASE
+					WHEN "issuer" IS NULL OR btrim("issuer") = '' THEN
+						CASE WHEN "provider_id" = 'credential'
+							THEN 'local:credential'
+							ELSE 'local:oauth:' || "provider_id"
+						END
+					ELSE "issuer"
+				END AS resolved_issuer,
+				CASE WHEN "provider_id" = 'credential' THEN "user_id" ELSE "account_id" END AS resolved_account_id
+			FROM "account"
+		) AS resolved_account
+		GROUP BY resolved_issuer, resolved_account_id
+		HAVING count(*) > 1
+	) THEN
+		RAISE EXCEPTION 'Dayflow migration preflight: duplicate Better Auth account identities must be reconciled before migration';
+	END IF;
+END $$;--> statement-breakpoint
 ALTER TABLE "attendance_corrections" ADD COLUMN "employee_id" integer;--> statement-breakpoint
 ALTER TABLE "attendance_corrections" ADD COLUMN "organization_id" integer;--> statement-breakpoint
 ALTER TABLE "attendance_corrections" ADD COLUMN "attendance_id" integer;--> statement-breakpoint
@@ -65,6 +149,7 @@ ALTER TABLE "leave_requests" ALTER COLUMN "start_date" SET DATA TYPE timestamp w
 ALTER TABLE "leave_requests" ALTER COLUMN "end_date" SET DATA TYPE timestamp with time zone USING "end_date" AT TIME ZONE 'UTC';--> statement-breakpoint
 ALTER TABLE "leave_requests" ALTER COLUMN "days" SET DATA TYPE numeric(7,2) USING "days"::numeric(7,2);--> statement-breakpoint
 ALTER TABLE "leave_requests" ALTER COLUMN "days" SET DEFAULT '1';--> statement-breakpoint
+UPDATE "leave_requests" SET "days" = '1' WHERE "days" IS NULL;--> statement-breakpoint
 ALTER TABLE "leave_requests" ALTER COLUMN "days" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "leave_requests" ALTER COLUMN "created_at" SET DATA TYPE timestamp with time zone USING "created_at"::timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "leave_requests" ALTER COLUMN "updated_at" SET DATA TYPE timestamp with time zone USING "updated_at"::timestamp with time zone;--> statement-breakpoint
@@ -82,6 +167,13 @@ ALTER TABLE "work_schedules" ALTER COLUMN "start_date" SET DATA TYPE timestamp w
 ALTER TABLE "work_schedules" ALTER COLUMN "end_date" SET DATA TYPE timestamp with time zone USING "end_date" AT TIME ZONE 'UTC';--> statement-breakpoint
 ALTER TABLE "work_schedules" ALTER COLUMN "created_at" SET DATA TYPE timestamp with time zone USING "created_at"::timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "work_schedules" ALTER COLUMN "updated_at" SET DATA TYPE timestamp with time zone USING "updated_at"::timestamp with time zone;--> statement-breakpoint
+UPDATE "leave_requests"
+SET "rejection_reason" = coalesce(
+	nullif(btrim("decision_comment"), ''),
+	'Rejected before decision comments were recorded'
+)
+WHERE "status" = 'rejected'
+	AND nullif(btrim("rejection_reason"), '') IS NULL;--> statement-breakpoint
 WITH attendance_work_dates AS (
 	SELECT
 		"id",

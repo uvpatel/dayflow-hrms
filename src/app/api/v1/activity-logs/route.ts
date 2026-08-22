@@ -1,29 +1,38 @@
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { activityLogs } from "@/db/schema";
-import { count, desc, ilike, or } from "drizzle-orm";
+import { and, count, desc, eq, ilike, or, type SQL } from "drizzle-orm";
 import {
   errorResponse,
   paginatedResponse,
   parsePagination,
   buildPaginationMeta,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "audit:read");
+    const organizationId = requireOrganization(authContext);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, offset, search } = parsePagination(searchParams, 50, 100);
 
-    const where = search
-      ? or(
+    const conditions: SQL[] = [eq(activityLogs.organizationId, organizationId)];
+    if (search) {
+      conditions.push(
+        or(
           ilike(activityLogs.action, `%${search}%`),
-          ilike(activityLogs.description, `%${search}%`)
-        )
-      : undefined;
+          ilike(activityLogs.description, `%${search}%`),
+        )!,
+      );
+    }
+    const where = and(...conditions);
 
     const [items, [totalRes]] = await Promise.all([
       db

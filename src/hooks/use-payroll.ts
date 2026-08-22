@@ -38,6 +38,45 @@ export function useSalaryStructures() {
   });
 }
 
+export function useCreateSalaryStructure() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { name: string; description?: string }) => {
+      const response = await apiClient<SalaryStructure>("/api/v1/salary-structures", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: payrollKeys.structures() });
+    },
+  });
+}
+
+export function useUpdateSalaryStructure() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...payload
+    }: {
+      id: number;
+      name?: string;
+      description?: string;
+    }) => {
+      const response = await apiClient<SalaryStructure>(
+        `/api/v1/salary-structures/${id}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: payrollKeys.structures() });
+    },
+  });
+}
+
 export function usePayslips(params?: { limit?: number; offset?: number; search?: string }) {
   return useQuery({
     queryKey: payrollKeys.payslips(params),
@@ -56,6 +95,28 @@ export function usePayslips(params?: { limit?: number; offset?: number; search?:
   });
 }
 
+export function useCreatePayslip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      employeeId: number;
+      payrollPeriodId: number;
+      grossSalary: string;
+      deductions?: string;
+      basicSalary?: string;
+    }) => {
+      const response = await apiClient<Payslip>("/api/v1/payroll/payslips", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: payrollKeys.all });
+    },
+  });
+}
+
 export function useMyPayslips() {
   return useQuery({
     queryKey: payrollKeys.myPayslips(),
@@ -69,7 +130,12 @@ export function useMyPayslips() {
 export function useCreatePeriod() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { name: string; description?: string }) => {
+    mutationFn: async (payload: {
+      name: string;
+      description?: string;
+      startDate?: string;
+      endDate?: string;
+    }) => {
       const res = await apiClient<PayrollPeriod>("/api/v1/payroll/periods", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -105,6 +171,22 @@ export function useFinalizePayroll() {
         method: "POST",
       });
       return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: payrollKeys.all });
+    },
+  });
+}
+
+export function usePublishPayroll() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (periodId: number) => {
+      const response = await apiClient<{ message: string }>(
+        `/api/v1/payroll/periods/${periodId}/publish`,
+        { method: "POST" },
+      );
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: payrollKeys.all });

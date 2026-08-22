@@ -2,7 +2,7 @@
 
 Human Resource Management System — every workday, perfectly aligned.
 
-Dayflow is a Next.js HRMS for employee self-service, manager team workflows, attendance, leave, payroll visibility, HR operations, organization configuration, notifications, reports, and auditing. The repository currently combines completed role/attendance/team foundations with older leave, payroll, reporting, and support-table scaffolding; see [Implementation status](#implementation-status) before treating it as production-ready.
+Dayflow is a Next.js HRMS for employee self-service, manager team workflows, attendance, leave, payroll visibility, HR operations, organization configuration, notifications, reports, and auditing. The main workflows are implemented, but generated migrations still need representative-data validation and several schema and production-hardening limitations remain; see [Implementation status](#implementation-status) before treating it as production-ready.
 
 ## Stack
 
@@ -22,17 +22,20 @@ Implemented and covered by focused tests:
 - Better Auth email/password configuration, optional GitHub OAuth, password-reset and verification delivery hooks, trusted-origin/CSRF checks, and endpoint rate limits.
 - Employee organization scoping, direct-report lists, manager assignment validation, and manager/self/HR/admin resource rules.
 - Server-timestamped attendance check-in/out, timezone-derived work dates, schedule-aware lateness/duration, today state, and generated uniqueness/check constraints.
+- Actor-scoped leave catalogs, balances, requests, cancellation, and manager/HR decisions, including scheduled-workday/holiday duration and atomic request, balance, attendance, notification, and audit writes.
+- Organization-scoped payroll periods and payslips with exact-cent net-pay derivation and the locked `draft` -> `review` -> `finalized` -> `published` lifecycle.
+- Persisted, actor-scoped dashboard, attendance, leave, and payroll reports; self-owned notifications; and organization-scoped reference-data services.
 - Role-aware dashboard/sidebar integration and canonical profile, team, attendance, organization, payroll, notification, report, and settings pages.
-- A generated append-only schema migration and a repeat-safe development seed definition for one admin, two HR users, three managers, and twenty employees.
+- Two generated append-only schema migrations and a repeat-safe development seed definition for one admin, two HR users, three managers, and twenty employees.
 
-Known incomplete or unverified areas:
+Known limitations and unverified areas:
 
-- Leave detail/update/delete and decision handlers still need consistent row-level actor scoping, transactional balance updates, persisted decision metadata, and cancellation semantics.
-- Several report endpoints still return sample trend/breakdown values, and payroll calculate/finalize behavior is scaffold-level rather than a complete locked payroll engine.
-- Some legacy support tables and identifiers do not yet have tenant columns or foreign keys; these are listed in [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md).
+- The payroll workflow manages entered gross/deduction amounts and publication state, but it is not a statutory tax, benefits, or formula engine. Salary structures/components and `payslip_items` are not wired into payslip calculations.
+- Some legacy support tables and identifiers do not yet have tenant columns or foreign keys; these are listed in [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md). Organization IDs newly added to legacy leave-policy and salary-catalog rows are nullable until existing data is backfilled.
+- The generic approval table is actor-scoped in services but is not relationally linked to its source leave/correction record, and activity logs do not carry organization or actor keys.
 - Authentication context resolution can create/link employee and default-organization records during a read and should be separated into an explicit onboarding flow.
 - Rate limiting uses in-process memory, so a shared store is still needed for consistent limits across multiple production instances.
-- The latest migration and the seed were generated/updated but were not executed against a database during this implementation pass.
+- The generated migrations and seed definition were not executed against a database during this implementation pass; database constraints, transactions, concurrency, and legacy-data conversion therefore remain unverified in a real database.
 
 ## Roles
 
@@ -102,7 +105,7 @@ Production must use an HTTPS `BETTER_AUTH_URL`, a unique high-entropy secret, an
 
 ## Database workflow
 
-Schema definitions are in `src/db/schema`; append-only migrations and snapshots are in `drizzle`. The latest generated artifact is `drizzle/20260822083351_worthless_mister_fear`. It has not been applied to a database, and the seed has not been run in this implementation pass.
+Schema definitions are in `src/db/schema`; append-only migrations and snapshots are in `drizzle`. This pass generated `drizzle/20260822083351_worthless_mister_fear` followed by `drizzle/20260822092821_mysterious_zemo`. Neither migration has been applied to a database, and the seed has not been run in this implementation pass. A final `db:generate` reported no additional schema changes.
 
 Generate and inspect a migration:
 
@@ -187,7 +190,7 @@ src/
 └── providers/               # Query and theme providers
 ```
 
-Newer employee/team and attendance handlers authenticate first, validate input, authorize the resolved server identity, call domain services, and return the common response envelope. Some older leave, payroll, organization, notification, approval, and report handlers still use legacy response/authorization patterns; [API_DOCUMENTATION.md](./API_DOCUMENTATION.md) calls out those boundaries. Attendance timestamps and duration calculations are server-authoritative.
+Canonical employee/team, attendance, leave, payroll, organization-reference, notification, approval, and report handlers authenticate the resolved server identity and enforce their documented actor or organization scope. Some compatibility handlers still use older response patterns, so clients must tolerate the transition described in [API_DOCUMENTATION.md](./API_DOCUMENTATION.md). Attendance timestamps, leave duration, and payroll net-pay calculations are server-authoritative.
 
 ## Verification
 
@@ -202,7 +205,7 @@ bun run build
 
 See [TESTING.md](./TESTING.md) for focused and manual workflow coverage.
 
-At the documentation checkpoint on 2026-08-22, `bun test` passed all 20 unit tests across `tests/permissions.test.ts` and `tests/business-domain.test.ts`. No database-backed migration, seed, route, concurrency, or rollback test was run. Lint, typecheck, and production-build results should be taken from the final verification run rather than inferred from the unit-test result.
+At the documentation checkpoint on 2026-08-22, `bun test` passed all 26 unit tests with 77 assertions across `tests/permissions.test.ts` and `tests/business-domain.test.ts`. No database-backed migration, seed, route, concurrency, or rollback test was run. Lint, typecheck, and production-build results should be taken from the final verification run rather than inferred from the unit-test result.
 
 ## Documentation
 
@@ -214,9 +217,9 @@ At the documentation checkpoint on 2026-08-22, `bun test` passed all 20 unit tes
 
 ## Deployment checklist
 
-Do not deploy this branch as a complete production HR/payroll system until the known incomplete areas above are resolved and the generated migration is validated on representative data.
+Do not deploy this branch as a complete production HR/payroll system until the limitations above are accepted or resolved and both generated migrations are validated on representative data.
 
-- Use a production Neon branch and apply reviewed migrations once.
+- Take a verified backup or database branch, run duplicate/orphan/cast preflight checks, rehearse both migrations on representative data, and only then apply the reviewed migrations to production.
 - Set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and all provider secrets in the deployment environment.
 - Configure GitHub's production callback URL as `<origin>/api/auth/callback/github`.
 - Confirm email delivery before requiring verification in production.

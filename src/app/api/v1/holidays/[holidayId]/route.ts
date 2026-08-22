@@ -8,7 +8,11 @@ import {
   validateBody,
   validateParams,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 const holidayIdParamSchema = z.object({
   holidayId: z
@@ -27,9 +31,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "holiday:read");
+    const organizationId = requireOrganization(authContext);
 
     const { holidayId } = await validateParams(params, holidayIdParamSchema);
-    const hol = await organizationService.getHoliday(holidayId);
+    const hol = await organizationService.getHoliday(organizationId, holidayId);
 
     return successResponse(hol, undefined, `Holiday ${holidayId} fetched successfully`);
   } catch (error) {
@@ -41,10 +46,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "holiday:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { holidayId } = await validateParams(params, holidayIdParamSchema);
     const data = await validateBody(request, updateHolidaySchema);
-    const updated = await organizationService.updateHoliday(holidayId, data);
+    const updated = await organizationService.updateHoliday(organizationId, holidayId, data);
 
     return successResponse(updated, undefined, `Holiday ${holidayId} updated successfully`);
   } catch (error) {
@@ -56,9 +62,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "holiday:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { holidayId } = await validateParams(params, holidayIdParamSchema);
-    const deleted = await organizationService.deleteHoliday(holidayId);
+    const deleted = await organizationService.deleteHoliday(organizationId, holidayId);
 
     return successResponse(deleted, undefined, `Holiday ${holidayId} deleted successfully`);
   } catch (error) {

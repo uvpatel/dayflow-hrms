@@ -53,6 +53,7 @@ export function SignupForm({
   const router = useRouter();
   const safeCallbackURL = sanitizeCallbackPath(callbackURL);
   const [name, setName] = useState("");
+  const [employeeNumber, setEmployeeNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -63,6 +64,7 @@ export function SignupForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
     name?: string;
+    employeeNumber?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
@@ -71,6 +73,7 @@ export function SignupForm({
   const validateForm = () => {
     const errors: {
       name?: string;
+      employeeNumber?: string;
       email?: string;
       password?: string;
       confirmPassword?: string;
@@ -78,6 +81,10 @@ export function SignupForm({
 
     if (!name.trim()) {
       errors.name = "Name is required";
+    }
+
+    if (!employeeNumber.trim()) {
+      errors.employeeNumber = "Employee ID is required";
     }
 
     if (!email.trim()) {
@@ -114,6 +121,7 @@ export function SignupForm({
     try {
       const res = await authClient.signUp.email({
         name: name.trim(),
+        employeeNumber: employeeNumber.trim().toUpperCase(),
         email: email.trim(),
         password,
         callbackURL: createAbsoluteCallbackURL(
@@ -202,6 +210,35 @@ export function SignupForm({
                   {formError}
                 </div>
               )}
+
+              <Field>
+                <FieldLabel htmlFor="employee-number">Employee ID</FieldLabel>
+                <Input
+                  id="employee-number"
+                  type="text"
+                  placeholder="EMP-0001"
+                  value={employeeNumber}
+                  onChange={(event) => {
+                    setEmployeeNumber(event.target.value.toUpperCase());
+                    if (fieldErrors.employeeNumber) {
+                      setFieldErrors((previous) => ({
+                        ...previous,
+                        employeeNumber: undefined,
+                      }));
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  aria-invalid={Boolean(fieldErrors.employeeNumber)}
+                  autoComplete="off"
+                  required
+                />
+                {fieldErrors.employeeNumber && (
+                  <FieldError errors={[{ message: fieldErrors.employeeNumber }]} />
+                )}
+                <FieldDescription>
+                  Use the employee ID issued by your HR team.
+                </FieldDescription>
+              </Field>
 
               <Field>
                 <FieldLabel htmlFor="name">Full Name</FieldLabel>
@@ -415,13 +452,13 @@ export function SignupForm({
       </Card>
       <FieldDescription className="px-6 text-center">
         By clicking continue, you agree to our{" "}
-        <a href="#" className="underline underline-offset-4">
+        <Link href="/terms" className="underline underline-offset-4">
           Terms of Service
-        </a>{" "}
+        </Link>{" "}
         and{" "}
-        <a href="#" className="underline underline-offset-4">
+        <Link href="/privacy" className="underline underline-offset-4">
           Privacy Policy
-        </a>
+        </Link>
         .
       </FieldDescription>
     </div>

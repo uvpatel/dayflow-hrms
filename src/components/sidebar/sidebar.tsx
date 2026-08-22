@@ -14,6 +14,7 @@ import {
   UserRound,
   Users,
   Wallet,
+  Laptop,
 } from "lucide-react";
 
 import { NavMain, type NavMainItem } from "@/components/sidebar/navmain";
@@ -40,7 +41,7 @@ function normalizeRole(role?: string | null): DayflowRole {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: me } = useMe();
-  const role = normalizeRole(me?.user.role ?? me?.employee?.role);
+  const role = normalizeRole(me?.employee?.role ?? me?.user.role);
   const canReview = role === "manager" || role === "hr" || role === "admin";
   const canManagePeople = role === "hr" || role === "admin";
   const canManageOrganization = role === "hr" || role === "admin";
@@ -62,6 +63,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: LayoutDashboard,
     },
     {
+      title: "Role Portals",
+      url: "/employee",
+      icon: Laptop,
+      items: [
+        { title: "Employee Hub", url: "/employee" },
+        ...(canReview ? [{ title: "Manager Hub", url: "/manager" }] : []),
+        ...(canManagePeople ? [{ title: "HR Operations Hub", url: "/hr" }] : []),
+        ...(isAdmin ? [{ title: "Admin Center", url: "/admin" }] : []),
+      ],
+    },
+    {
       title: "My profile",
       url: "/dashboard/profile",
       icon: UserRound,
@@ -75,6 +87,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             items: [
               { title: "Directory", url: "/dashboard/people" },
               { title: "Onboarding", url: "/dashboard/people/onboarding" },
+              { title: "People Settings", url: "/dashboard/people/settings" },
+              { title: "Billing & Plans", url: "/dashboard/people/billing" },
             ],
           },
         ]
@@ -93,8 +107,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: CalendarCheck,
       items: [
         { title: "Overview", url: "/dashboard/attendance" },
-        { title: "Daily view", url: "/dashboard/attendance/daily" },
-        { title: "Weekly view", url: "/dashboard/attendance/weekly" },
+        { title: "Daily logs", url: "/dashboard/attendance/daily" },
+        { title: "Weekly timesheet", url: "/dashboard/attendance/weekly" },
         { title: "Corrections", url: "/dashboard/attendance/corrections" },
       ],
     },
@@ -104,8 +118,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: CalendarClock,
       items: [
         { title: "Requests", url: "/dashboard/time-off" },
-        { title: "Apply", url: "/dashboard/time-off/apply" },
-        { title: "Balances", url: "/dashboard/time-off/balance" },
+        { title: "Apply for leave", url: "/dashboard/time-off/apply" },
+        { title: "Leave balances", url: "/dashboard/time-off/balance" },
       ],
     },
     ...(canReview
@@ -114,6 +128,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             title: "Approvals",
             url: "/dashboard/approvals",
             icon: CheckCircle2,
+            items: [
+              { title: "All approvals", url: "/dashboard/approvals" },
+              { title: "Leave requests", url: "/dashboard/approvals/leave" },
+              { title: "Attendance corrections", url: "/dashboard/approvals/attendance" },
+            ],
           },
         ]
       : []),
@@ -140,7 +159,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: Building2,
       items: [
         { title: "Overview", url: "/dashboard/organization" },
-        { title: "Holidays", url: "/dashboard/holidays" },
+        { title: "Company holidays", url: "/dashboard/holidays" },
         ...(canManageOrganization
           ? [
               { title: "Departments", url: "/dashboard/departments" },
@@ -148,6 +167,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               { title: "Office locations", url: "/dashboard/office-locations" },
               { title: "Work schedules", url: "/dashboard/work-schedules" },
             ]
+          : []),
+        ...(isAdmin
+          ? [{ title: "Roles & permissions", url: "/dashboard/organization/roles" }]
           : []),
       ],
     },

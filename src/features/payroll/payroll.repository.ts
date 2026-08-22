@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { db, sql as neonSql } from "@/db";
 import {
   payrollPeriods,
   salaryStructures,
@@ -10,8 +10,43 @@ import {
   NewPayrollPeriod,
   NewSalaryStructure,
   NewSalaryComponent,
-  NewPayslip,
 } from "./payroll.types";
+
+interface IdRow {
+  id: number;
+}
+
+export interface DraftPeriodUpdate {
+  name?: string;
+  description?: string | null;
+  startDate?: Date | null;
+  endDate?: Date | null;
+}
+
+export interface DraftPayslipCreate {
+  organizationId: number;
+  employeeId: number;
+  payrollPeriodId: number;
+  name: string | null;
+  description: string | null;
+  month: string | null;
+  year: number | null;
+  basicSalary: string | null;
+  grossSalary: string;
+  deductions: string;
+  netSalary: string;
+}
+
+export interface DraftPayslipUpdate {
+  name: string | null;
+  description: string | null;
+  month: string | null;
+  year: number | null;
+  basicSalary: string | null;
+  grossSalary: string;
+  deductions: string;
+  netSalary: string;
+}
 
 export class PayrollRepository {
   // Periods
@@ -46,38 +81,197 @@ export class PayrollRepository {
     return created;
   }
 
-  async updatePeriod(organizationId: number, id: number, data: Partial<NewPayrollPeriod>) {
-    const [updated] = await db
-      .update(payrollPeriods)
-      .set({ ...data, updatedAt: new Date() })
-      .where(and(
-        eq(payrollPeriods.id, id),
-        eq(payrollPeriods.organizationId, organizationId),
-      ))
-      .returning();
-    return updated ?? null;
+  async updatePeriod(organizationId: number, id: number, data: DraftPeriodUpdate) {
+    const rows = (await neonSql`
+      update payroll_periods as period
+      set
+        name = case
+          when ${data.name !== undefined} then ${data.name ?? null}::text
+          else period.name
+        end,
+        description = case
+          when ${data.description !== undefined} then ${data.description ?? null}::text
+          else period.description
+        end,
+        start_date = case
+          when ${data.startDate !== undefined}
+            then ${data.startDate?.toISOString() ?? null}::timestamptz
+          else period.start_date
+        end,
+        end_date = case
+          when ${data.endDate !== undefined}
+            then ${data.endDate?.toISOString() ?? null}::timestamptz
+          else period.end_date
+        end,
+        updated_at = now()
+      where period.id = ${id}
+        and period.organization_id = ${organizationId}
+        and period.status = 'draft'
+      returning period.id
+    `) as unknown as IdRow[];
+
+    return rows[0]?.id ? this.findPeriodById(organizationId, rows[0].id) : null;
   }
 
   async deletePeriod(organizationId: number, id: number) {
-    const [deleted] = await db.delete(payrollPeriods).where(and(
-      eq(payrollPeriods.id, id),
-      eq(payrollPeriods.organizationId, organizationId),
-    )).returning();
-    return deleted ?? null;
+    const rows = (await neonSql`
+      delete from payroll_periods as period
+      where period.id = ${id}
+        and period.organization_id = ${organizationId}
+        and period.status = 'draft'
+      returning period.id
+    `) as unknown as IdRow[];
+    return rows[0] ?? null;
+  }
+
+  async calculatePeriod(organizationId: number, id: number) {
+    const rows = (await neonSql`
+      with target as materialized (
+        select period.id
+        from payroll_periods as period
+        where period.id = ${id}
+          and period.organization_id = ${organizationId}
+          and period.status = 'draft'
+        for update
+      ), invalid_payslip as (
+        select payslip.id
+        from payslips as payslip
+        join target on target.id = payslip.payroll_period_id
+        where payslip.organization_id is distinct from ${organizationId}
+          or payslip.status <> 'draft'
+          or (
+            payslip.gross_salary is null
+            or coalesce(payslip.deductions, 0) > payslip.gross_salary
+          )
+        limit 1
+      ), payslip_write as (
+        update payslips as payslip
+        set
+          deductions = coalesce(payslip.deductions, 0),
+          net_salary = payslip.gross_salary - coalesce(payslip.deductions, 0),
+          status = 'calculated',
+          published_at = null,
+          updated_at = now()
+        from target
+        where payslip.payroll_period_id = target.id
+          and payslip.organization_id = ${organizationId}
+          and not exists (select 1 from invalid_payslip)
+        returning payslip.id
+      ), period_write as (
+        update payroll_periods as period
+        set status = 'review', updated_at = now()
+        from target
+        where period.id = target.id
+          and not exists (select 1 from invalid_payslip)
+          and exists (select 1 from payslip_write)
+        returning period.id
+      )
+      select period_write.id from period_write
+    `) as unknown as { id: number }[];
+
+    return rows[0]?.id ? this.findPeriodById(organizationId, rows[0].id) : null;
+  }
+
+  async finalizePeriod(organizationId: number, id: number) {
+    const rows = (await neonSql`
+      with target as materialized (
+        select period.id
+        from payroll_periods as period
+        where period.id = ${id}
+          and period.organization_id = ${organizationId}
+          and period.status = 'review'
+        for update
+      ), invalid_payslip as (
+        select payslip.id
+        from payslips as payslip
+        join target on target.id = payslip.payroll_period_id
+        where payslip.organization_id is distinct from ${organizationId}
+          or (
+            payslip.status not in ('calculated', 'reviewed')
+            or payslip.gross_salary is null
+            or payslip.net_salary is null
+            or payslip.net_salary <> payslip.gross_salary - coalesce(payslip.deductions, 0)
+          )
+        limit 1
+      ), payslip_write as (
+        update payslips as payslip
+        set status = 'reviewed', updated_at = now()
+        from target
+        where payslip.payroll_period_id = target.id
+          and payslip.organization_id = ${organizationId}
+          and not exists (select 1 from invalid_payslip)
+        returning payslip.id
+      ), period_write as (
+        update payroll_periods as period
+        set status = 'finalized', updated_at = now()
+        from target
+        where period.id = target.id
+          and not exists (select 1 from invalid_payslip)
+          and exists (select 1 from payslip_write)
+        returning period.id
+      )
+      select period_write.id from period_write
+    `) as unknown as { id: number }[];
+
+    return rows[0]?.id ? this.findPeriodById(organizationId, rows[0].id) : null;
+  }
+
+  async publishPeriod(organizationId: number, id: number) {
+    const rows = (await neonSql`
+      with target as materialized (
+        select period.id
+        from payroll_periods as period
+        where period.id = ${id}
+          and period.organization_id = ${organizationId}
+          and period.status = 'finalized'
+        for update
+      ), invalid_payslip as materialized (
+        select payslip.id
+        from payslips as payslip
+        join target on target.id = payslip.payroll_period_id
+        where payslip.organization_id is distinct from ${organizationId}
+          or payslip.status <> 'reviewed'
+        limit 1
+      ), payslip_write as (
+        update payslips as payslip
+        set status = 'published', published_at = now(), updated_at = now()
+        from target
+        where payslip.payroll_period_id = target.id
+          and payslip.organization_id = ${organizationId}
+          and payslip.status = 'reviewed'
+          and not exists (select 1 from invalid_payslip)
+        returning payslip.id
+      ), period_write as (
+        update payroll_periods as period
+        set status = 'published', updated_at = now()
+        from target
+        where period.id = target.id
+          and exists (select 1 from payslip_write)
+          and not exists (select 1 from invalid_payslip)
+        returning period.id
+      )
+      select period_write.id from period_write
+    `) as unknown as { id: number }[];
+
+    return rows[0]?.id ? this.findPeriodById(organizationId, rows[0].id) : null;
   }
 
   // Structures
-  async findStructures(limit = 50, offset = 0) {
+  async findStructures(organizationId: number, limit = 50, offset = 0) {
     return await db
       .select()
       .from(salaryStructures)
+      .where(eq(salaryStructures.organizationId, organizationId))
       .orderBy(desc(salaryStructures.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findStructureById(id: number) {
-    const [item] = await db.select().from(salaryStructures).where(eq(salaryStructures.id, id));
+  async findStructureById(organizationId: number, id: number) {
+    const [item] = await db.select().from(salaryStructures).where(and(
+      eq(salaryStructures.id, id),
+      eq(salaryStructures.organizationId, organizationId),
+    ));
     return item ?? null;
   }
 
@@ -86,32 +280,42 @@ export class PayrollRepository {
     return created;
   }
 
-  async updateStructure(id: number, data: Partial<NewSalaryStructure>) {
+  async updateStructure(organizationId: number, id: number, data: Partial<NewSalaryStructure>) {
     const [updated] = await db
       .update(salaryStructures)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(salaryStructures.id, id))
+      .where(and(
+        eq(salaryStructures.id, id),
+        eq(salaryStructures.organizationId, organizationId),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async deleteStructure(id: number) {
-    const [deleted] = await db.delete(salaryStructures).where(eq(salaryStructures.id, id)).returning();
+  async deleteStructure(organizationId: number, id: number) {
+    const [deleted] = await db.delete(salaryStructures).where(and(
+      eq(salaryStructures.id, id),
+      eq(salaryStructures.organizationId, organizationId),
+    )).returning();
     return deleted ?? null;
   }
 
   // Components
-  async findComponents(limit = 50, offset = 0) {
+  async findComponents(organizationId: number, limit = 50, offset = 0) {
     return await db
       .select()
       .from(salaryComponents)
+      .where(eq(salaryComponents.organizationId, organizationId))
       .orderBy(desc(salaryComponents.createdAt))
       .limit(limit)
       .offset(offset);
   }
 
-  async findComponentById(id: number) {
-    const [item] = await db.select().from(salaryComponents).where(eq(salaryComponents.id, id));
+  async findComponentById(organizationId: number, id: number) {
+    const [item] = await db.select().from(salaryComponents).where(and(
+      eq(salaryComponents.id, id),
+      eq(salaryComponents.organizationId, organizationId),
+    ));
     return item ?? null;
   }
 
@@ -120,17 +324,23 @@ export class PayrollRepository {
     return created;
   }
 
-  async updateComponent(id: number, data: Partial<NewSalaryComponent>) {
+  async updateComponent(organizationId: number, id: number, data: Partial<NewSalaryComponent>) {
     const [updated] = await db
       .update(salaryComponents)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(salaryComponents.id, id))
+      .where(and(
+        eq(salaryComponents.id, id),
+        eq(salaryComponents.organizationId, organizationId),
+      ))
       .returning();
     return updated ?? null;
   }
 
-  async deleteComponent(id: number) {
-    const [deleted] = await db.delete(salaryComponents).where(eq(salaryComponents.id, id)).returning();
+  async deleteComponent(organizationId: number, id: number) {
+    const [deleted] = await db.delete(salaryComponents).where(and(
+      eq(salaryComponents.id, id),
+      eq(salaryComponents.organizationId, organizationId),
+    )).returning();
     return deleted ?? null;
   }
 
@@ -166,29 +376,149 @@ export class PayrollRepository {
     return item ?? null;
   }
 
-  async createPayslip(data: NewPayslip) {
-    const [created] = await db.insert(payslips).values(data).returning();
-    return created;
+  /** Locks the period before inserting so calculation cannot race a new slip. */
+  async createPayslip(data: DraftPayslipCreate) {
+    const rows = (await neonSql`
+      with target_period as materialized (
+        select period.id
+        from payroll_periods as period
+        where period.id = ${data.payrollPeriodId}
+          and period.organization_id = ${data.organizationId}
+          and period.status = 'draft'
+        for update
+      ), target_employee as materialized (
+        select employee.id
+        from employees as employee
+        where employee.id = ${data.employeeId}
+          and employee.organization_id = ${data.organizationId}
+      ), inserted as (
+        insert into payslips (
+          organization_id,
+          employee_id,
+          payroll_period_id,
+          name,
+          description,
+          month,
+          year,
+          basic_salary,
+          gross_salary,
+          deductions,
+          net_salary,
+          status,
+          published_at,
+          created_at,
+          updated_at
+        )
+        select
+          ${data.organizationId},
+          target_employee.id,
+          target_period.id,
+          ${data.name},
+          ${data.description},
+          ${data.month},
+          ${data.year},
+          ${data.basicSalary}::numeric(14,2),
+          ${data.grossSalary}::numeric(14,2),
+          ${data.deductions}::numeric(14,2),
+          ${data.netSalary}::numeric(14,2),
+          'draft',
+          null,
+          now(),
+          now()
+        from target_period
+        cross join target_employee
+        returning id
+      )
+      select inserted.id from inserted
+    `) as unknown as IdRow[];
+
+    return rows[0]?.id
+      ? this.findPayslipById(data.organizationId, rows[0].id)
+      : null;
   }
 
-  async updatePayslip(organizationId: number, id: number, data: Partial<NewPayslip>) {
-    const [updated] = await db
-      .update(payslips)
-      .set({ ...data, updatedAt: new Date() })
-      .where(and(
-        eq(payslips.id, id),
-        eq(payslips.organizationId, organizationId),
-      ))
-      .returning();
-    return updated ?? null;
+  /** Locks period first, then payslip, matching lifecycle transition order. */
+  async updatePayslip(
+    organizationId: number,
+    id: number,
+    data: DraftPayslipUpdate,
+  ) {
+    const rows = (await neonSql`
+      with candidate as materialized (
+        select payslip.payroll_period_id
+        from payslips as payslip
+        where payslip.id = ${id}
+          and payslip.organization_id = ${organizationId}
+      ), target_period as materialized (
+        select period.id
+        from payroll_periods as period
+        join candidate on candidate.payroll_period_id = period.id
+        where period.organization_id = ${organizationId}
+          and period.status = 'draft'
+        for update of period
+      ), target_payslip as materialized (
+        select payslip.id
+        from payslips as payslip
+        join target_period on target_period.id = payslip.payroll_period_id
+        where payslip.id = ${id}
+          and payslip.organization_id = ${organizationId}
+          and payslip.status = 'draft'
+        for update of payslip
+      ), updated as (
+        update payslips as payslip
+        set
+          name = ${data.name},
+          description = ${data.description},
+          month = ${data.month},
+          year = ${data.year},
+          basic_salary = ${data.basicSalary}::numeric(14,2),
+          gross_salary = ${data.grossSalary}::numeric(14,2),
+          deductions = ${data.deductions}::numeric(14,2),
+          net_salary = ${data.netSalary}::numeric(14,2),
+          status = 'draft',
+          published_at = null,
+          updated_at = now()
+        from target_payslip
+        where payslip.id = target_payslip.id
+        returning payslip.id
+      )
+      select updated.id from updated
+    `) as unknown as IdRow[];
+
+    return rows[0]?.id ? this.findPayslipById(organizationId, rows[0].id) : null;
   }
 
   async deletePayslip(organizationId: number, id: number) {
-    const [deleted] = await db.delete(payslips).where(and(
-      eq(payslips.id, id),
-      eq(payslips.organizationId, organizationId),
-    )).returning();
-    return deleted ?? null;
+    const rows = (await neonSql`
+      with candidate as materialized (
+        select payslip.payroll_period_id
+        from payslips as payslip
+        where payslip.id = ${id}
+          and payslip.organization_id = ${organizationId}
+      ), target_period as materialized (
+        select period.id
+        from payroll_periods as period
+        join candidate on candidate.payroll_period_id = period.id
+        where period.organization_id = ${organizationId}
+          and period.status = 'draft'
+        for update of period
+      ), target_payslip as materialized (
+        select payslip.id
+        from payslips as payslip
+        join target_period on target_period.id = payslip.payroll_period_id
+        where payslip.id = ${id}
+          and payslip.organization_id = ${organizationId}
+          and payslip.status = 'draft'
+        for update of payslip
+      ), deleted as (
+        delete from payslips as payslip
+        using target_payslip
+        where payslip.id = target_payslip.id
+        returning payslip.id
+      )
+      select deleted.id from deleted
+    `) as unknown as IdRow[];
+    return rows[0] ?? null;
   }
 }
 

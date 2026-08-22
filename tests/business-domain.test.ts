@@ -7,10 +7,16 @@ import {
 } from "../src/features/attendance/attendance.domain";
 import { validateManagerAssignment } from "../src/features/employees/employee.domain";
 import {
+  calculateNetSalary,
+  centsToMoney,
+  moneyToCents,
+} from "../src/features/payroll/payroll.domain";
+import {
   assertPendingCancellation,
   assertRejectComment,
   assertSufficientLeaveBalance,
   calculateRequestedDays,
+  calculateWorkingLeaveDays,
   canDecideLeaveRequest,
   canReadLeaveRequest,
 } from "../src/features/time-off/time-off.domain";
@@ -94,6 +100,20 @@ describe("manager assignment rules", () => {
   });
 });
 
+describe("payroll money rules", () => {
+  test("uses exact cents and derives net pay on the server", () => {
+    expect(moneyToCents("1234.5")).toBe(BigInt(123450));
+    expect(centsToMoney(BigInt(123450))).toBe("1234.50");
+    expect(calculateNetSalary("9200.00", "1700.25")).toBe("7499.75");
+  });
+
+  test("rejects deductions above gross salary", () => {
+    expect(() => calculateNetSalary("100.00", "100.01")).toThrow(
+      "cannot exceed",
+    );
+  });
+});
+
 describe("leave domain rules", () => {
   test("calculates inclusive full-day and half-day requests", () => {
     expect(
@@ -110,6 +130,25 @@ describe("leave domain rules", () => {
         "half_day",
       ),
     ).toBe(0.5);
+  });
+
+  test("uses scheduled workdays and excludes organization holidays", () => {
+    expect(
+      calculateWorkingLeaveDays(
+        new Date("2026-08-21T00:00:00.000Z"),
+        new Date("2026-08-24T00:00:00.000Z"),
+        "full_day",
+        [1, 2, 3, 4, 5],
+        new Set(["2026-08-24"]),
+      ),
+    ).toBe(1);
+    expect(() =>
+      calculateWorkingLeaveDays(
+        new Date("2026-08-22T00:00:00.000Z"),
+        new Date("2026-08-22T00:00:00.000Z"),
+        "half_day",
+      ),
+    ).toThrow("scheduled working day");
   });
 
   test("enforces balance, rejection comment, and pending-only cancellation", () => {

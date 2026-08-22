@@ -23,8 +23,11 @@ export class OrganizationService {
     return await organizationRepository.findOrganizations(limit, offset, search);
   }
 
-  async getOrganization(id: number) {
-    const org = await organizationRepository.findOrganizationById(id);
+  async getOrganization(actorOrganizationId: number, id: number) {
+    const org = await organizationRepository.findOrganizationById(
+      actorOrganizationId,
+      id,
+    );
     if (!org) throw new NotFoundError(`Organization with ID ${id} not found`);
     return org;
   }
@@ -32,16 +35,26 @@ export class OrganizationService {
   async createOrganization(data: NewOrganization) {
     const created = await organizationRepository.createOrganization(data);
     await logActivity({
+      organizationId: created.id,
       action: "ORGANIZATION_CREATED",
       description: `Created organization ${created.name}`,
     });
     return created;
   }
 
-  async updateOrganization(id: number, data: Partial<NewOrganization>) {
-    await this.getOrganization(id);
-    const updated = await organizationRepository.updateOrganization(id, data);
+  async updateOrganization(
+    actorOrganizationId: number,
+    id: number,
+    data: Partial<NewOrganization>,
+  ) {
+    await this.getOrganization(actorOrganizationId, id);
+    const updated = await organizationRepository.updateOrganization(
+      actorOrganizationId,
+      id,
+      data,
+    );
     await logActivity({
+      organizationId: actorOrganizationId,
       action: "ORGANIZATION_UPDATED",
       description: `Updated organization ${id}`,
     });
@@ -63,6 +76,7 @@ export class OrganizationService {
     await this.assertEmployeeInOrganization(organizationId, data.managerId);
     const created = await organizationRepository.createDepartment(organizationId, data);
     await logActivity({
+      organizationId,
       action: "DEPARTMENT_CREATED",
       description: `Created department ${created.name}`,
     });
@@ -77,6 +91,7 @@ export class OrganizationService {
       throw new NotFoundError(`Department with ID ${id} not found`, "DEPARTMENT_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "DEPARTMENT_UPDATED",
       description: `Updated department ${id}`,
     });
@@ -90,6 +105,7 @@ export class OrganizationService {
       throw new NotFoundError(`Department with ID ${id} not found`, "DEPARTMENT_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "DEPARTMENT_DELETED",
       description: `Deleted department ${id}`,
     });
@@ -113,6 +129,7 @@ export class OrganizationService {
     }
     const created = await organizationRepository.createDesignation(organizationId, data);
     await logActivity({
+      organizationId,
       action: "DESIGNATION_CREATED",
       description: `Created designation ${created.name}`,
     });
@@ -133,6 +150,7 @@ export class OrganizationService {
       throw new NotFoundError(`Designation with ID ${id} not found`, "DESIGNATION_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "DESIGNATION_UPDATED",
       description: `Updated designation ${id}`,
     });
@@ -146,6 +164,7 @@ export class OrganizationService {
       throw new NotFoundError(`Designation with ID ${id} not found`, "DESIGNATION_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "DESIGNATION_DELETED",
       description: `Deleted designation ${id}`,
     });
@@ -166,6 +185,7 @@ export class OrganizationService {
   async createLocation(organizationId: number, data: LocationInput) {
     const created = await organizationRepository.createLocation(organizationId, data);
     await logActivity({
+      organizationId,
       action: "LOCATION_CREATED",
       description: `Created location ${created.name}`,
     });
@@ -179,6 +199,7 @@ export class OrganizationService {
       throw new NotFoundError(`Location with ID ${id} not found`, "LOCATION_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "LOCATION_UPDATED",
       description: `Updated location ${id}`,
     });
@@ -192,6 +213,7 @@ export class OrganizationService {
       throw new NotFoundError(`Location with ID ${id} not found`, "LOCATION_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "LOCATION_DELETED",
       description: `Deleted location ${id}`,
     });
@@ -212,6 +234,7 @@ export class OrganizationService {
   async createHoliday(organizationId: number, data: HolidayInput) {
     const created = await organizationRepository.createHoliday(organizationId, data);
     await logActivity({
+      organizationId,
       action: "HOLIDAY_CREATED",
       description: `Created holiday ${created.name}`,
     });
@@ -225,6 +248,7 @@ export class OrganizationService {
       throw new NotFoundError(`Holiday with ID ${id} not found`, "HOLIDAY_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "HOLIDAY_UPDATED",
       description: `Updated holiday ${id}`,
     });
@@ -238,6 +262,7 @@ export class OrganizationService {
       throw new NotFoundError(`Holiday with ID ${id} not found`, "HOLIDAY_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "HOLIDAY_DELETED",
       description: `Deleted holiday ${id}`,
     });
@@ -275,6 +300,7 @@ export class OrganizationService {
       );
     }
     await logActivity({
+      organizationId,
       action: "WORK_SCHEDULE_CREATED",
       description: `Created schedule ${created.scheduleName} for employee #${created.employeeId}`,
     });
@@ -288,6 +314,7 @@ export class OrganizationService {
       throw new NotFoundError(`Work schedule with ID ${id} not found`, "SCHEDULE_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "WORK_SCHEDULE_UPDATED",
       description: `Updated schedule ${id}`,
     });
@@ -301,6 +328,7 @@ export class OrganizationService {
       throw new NotFoundError(`Work schedule with ID ${id} not found`, "SCHEDULE_NOT_FOUND");
     }
     await logActivity({
+      organizationId,
       action: "WORK_SCHEDULE_DELETED",
       description: `Deleted schedule ${id}`,
     });

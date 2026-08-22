@@ -2,8 +2,8 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { employees, organizations } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { employees } from "@/db/schema";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   type Role,
   type Permission,
@@ -27,27 +27,6 @@ export interface AuthContext {
 }
 
 /**
- * Ensures at least one organization exists in the database.
- */
-async function ensureDefaultOrganization(): Promise<number> {
-  const [existingOrg] = await db.select().from(organizations).limit(1);
-  if (existingOrg) {
-    return existingOrg.id;
-  }
-
-  const [newOrg] = await db
-    .insert(organizations)
-    .values({
-      name: "Dayflow Inc.",
-      slug: "dayflow",
-      description: "Default Dayflow Organization",
-    })
-    .returning();
-
-  return newOrg.id;
-}
-
-/**
  * Resolves or links the Employee record corresponding to the authenticated User.
  */
 async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
@@ -62,17 +41,27 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
     return empByUserId;
   }
 
-  // 2. A verified account may claim an unlinked employee record with the
-  // same email. First-time linking always starts at employee privilege; an
+  // 2. A verified credential account claims the exact pre-issued employee ID
+  // and email pair. First-time linking always starts at employee privilege; an
   // administrator must explicitly approve any later role elevation.
   if (user.emailVerified) {
-    const [empByEmail] = await db
+    const employeeNumber =
+      "employeeNumber" in user && typeof user.employeeNumber === "string"
+        ? user.employeeNumber.trim().toUpperCase()
+        : null;
+    const [eligibleEmployee] = await db
       .select()
       .from(employees)
-      .where(eq(employees.email, user.email.toLowerCase()))
+      .where(and(
+        eq(employees.email, user.email.toLowerCase()),
+        isNull(employees.userId),
+        employeeNumber
+          ? eq(employees.employeeNumber, employeeNumber)
+          : undefined,
+      ))
       .limit(1);
 
-    if (empByEmail && !empByEmail.userId) {
+    if (eligibleEmployee) {
       const [linked] = await db
         .update(employees)
         .set({
@@ -80,46 +69,18 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
           role: "employee",
           updatedAt: new Date(),
         })
-        .where(eq(employees.id, empByEmail.id))
+        .where(and(
+          eq(employees.id, eligibleEmployee.id),
+          isNull(employees.userId),
+        ))
         .returning();
-      return linked;
+      if (linked) return linked;
     }
   }
 
-  // 3. If no employee record exists at all, auto-create one for the user
-  const defaultOrgId = await ensureDefaultOrganization();
-  const nameParts = (user.name || "Dayflow User").trim().split(/\s+/);
-  const firstName = nameParts[0] || "User";
-  const lastName = nameParts.slice(1).join(" ") || "Employee";
-
-  // Public registration is never allowed to bootstrap a privileged account.
-  // Development administrators are provisioned through the explicit seed flow;
-  // production role changes require an authorized server-side operation.
-  const [newEmployee] = await db
-    .insert(employees)
-    .values({
-      userId: user.id,
-      organizationId: defaultOrgId,
-      employeeNumber: `EMP-${user.id.replace(/[^a-z0-9]/gi, "").slice(0, 12).toUpperCase()}`,
-      firstName,
-      lastName,
-      email: user.email.toLowerCase(),
-      role: "employee",
-      employmentStatus: "active",
-      employmentType: "full_time",
-    })
-    .onConflictDoNothing({ target: employees.userId })
-    .returning();
-
-  if (newEmployee) return newEmployee;
-
-  const [concurrentlyCreatedEmployee] = await db
-    .select()
-    .from(employees)
-    .where(eq(employees.userId, user.id))
-    .limit(1);
-
-  return concurrentlyCreatedEmployee ?? null;
+  // Unprovisioned identities never create organizations or employee records as
+  // a side effect of reading a session. HR must issue an employee record first.
+  return null;
 }
 
 /**

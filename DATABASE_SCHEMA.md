@@ -4,15 +4,19 @@ This document describes the Drizzle schema currently exported from `src/db/schem
 
 ## Current migration status
 
-The latest migration was generated at:
+This implementation pass generated the following append-only migrations, in order:
 
 ```text
 drizzle/20260822083351_worthless_mister_fear/
 ├── migration.sql
 └── snapshot.json
+
+drizzle/20260822092821_mysterious_zemo/
+├── migration.sql
+└── snapshot.json
 ```
 
-It has **not** been applied to a database, and the development seed has **not** been executed as part of this implementation pass. Before applying it, point `DATABASE_URL` at a disposable development branch and inspect the SQL and existing data. In particular, the migration adds uniqueness constraints, foreign keys, check constraints, timestamp casts, and text-to-`numeric` casts that can fail when legacy rows are duplicated, orphaned, or malformed.
+Neither migration has been applied to a database, and the development seed has **not** been executed as part of this implementation pass. A subsequent `db:generate` reported no additional schema changes. Before applying either migration, point `DATABASE_URL` at a disposable development branch and inspect the SQL and existing data. The migrations add uniqueness constraints, foreign keys, check constraints, timestamp casts, and text-to-`numeric` casts that can fail when legacy rows are duplicated, orphaned, or malformed. The follow-up also adds nullable organization keys to legacy leave-policy and salary-catalog rows; existing rows require an intentional tenant backfill before those services can expose them.
 
 Do not edit or remove older migration folders. Do not use `db:push` as a substitute for reviewing and applying the generated migration.
 
@@ -52,6 +56,7 @@ The following relationships are declared as database foreign keys in the current
 | `attendance_corrections.attendance_id` | `attendances.id` | set null |
 | `attendance_corrections.reviewed_by` | `employees.id` | set null |
 | `leave_types.organization_id` | `organizations.id` | cascade |
+| `leave_policies.organization_id` | `organizations.id` | cascade |
 | `leave_allocations.employee_id` | `employees.id` | restrict |
 | `leave_requests.employee_id` | `employees.id` | restrict |
 | `leave_requests.organization_id` | `organizations.id` | restrict |
@@ -60,6 +65,8 @@ The following relationships are declared as database foreign keys in the current
 | `payslips.employee_id` | `employees.id` | restrict |
 | `payslips.organization_id` | `organizations.id` | restrict |
 | `payslips.payroll_period_id` | `payroll_periods.id` | restrict |
+| `salary_structures.organization_id` | `organizations.id` | cascade |
+| `salary_components.organization_id` | `organizations.id` | cascade |
 | `work_schedules.employee_id` | `employees.id` | cascade |
 
 `employees.work_schedule_id` is indexed but is not currently declared as a foreign key. Several supporting tables listed in [Legacy and incomplete relationships](#legacy-and-incomplete-relationships) also contain identifier columns without database-enforced relationships.
@@ -68,7 +75,7 @@ The following relationships are declared as database foreign keys in the current
 
 ### `user`
 
-Better Auth user identity. Email is unique. The table also contains verification state, image, role, ban fields, and created/updated timestamps.
+Better Auth user identity. Email and non-null employee number are unique. The table also contains verification state, image, role, ban fields, and created/updated timestamps. Application authorization remains based on the linked `employees.role`, not this table's legacy/default role value.
 
 ### `session`
 
@@ -78,7 +85,7 @@ Session tokens are unique and expire at `expires_at`. Sessions link to `user` wi
 
 Credential and OAuth accounts contain `account_id`, `provider_id`, non-null `issuer`, token fields, optional password hash, scopes, and expiry timestamps. `(issuer, account_id)` is unique, matching Better Auth 1.7 account lookup requirements.
 
-The latest migration backfills credential accounts with `issuer = 'local:credential'` and OAuth accounts with `issuer = 'local:oauth:' || provider_id` before making the column non-null.
+The `20260822083351_worthless_mister_fear` migration backfills credential accounts with `issuer = 'local:credential'` and OAuth accounts with `issuer = 'local:oauth:' || provider_id` before making the column non-null.
 
 ### `verification`
 
@@ -129,7 +136,7 @@ Important integrity rules:
 - Break, work, and overtime minutes cannot be negative.
 - Status is limited to `present`, `absent`, `half_day`, `leave`, or `holiday`.
 
-The latest migration backfills `work_date` only for employee/day combinations that have one legacy record. Duplicate legacy days remain null so the migration does not silently discard or merge data.
+The `20260822083351_worthless_mister_fear` migration backfills `work_date` only for employee/day combinations that have one legacy record. Duplicate legacy days remain null so the migration does not silently discard or merge data.
 
 ### `attendance_corrections`
 
@@ -155,7 +162,11 @@ Stores employee and organization, leave type text, timezone-aware start/end time
 
 Checks require an ordered date range, positive days, a known unit/status, and a non-empty rejection reason when status is `rejected`. These constraints are present in the generated migration but have not yet been exercised against a database.
 
-`leave_policies` and `approval_requests` remain generic scaffolding. They do not currently declare organization or foreign-key relationships.
+### `leave_policies`
+
+Stores organization-scoped policy names/descriptions. `organization_id` references `organizations` with cascade deletion but remains nullable for legacy-data migration compatibility.
+
+`approval_requests` remains a separate generic workflow table. Its requestor and approver integer IDs are not foreign keys, and it has no relation to the underlying leave/correction resource.
 
 ## Payroll
 
@@ -167,7 +178,7 @@ Organization-scoped period with optional start/end timestamps and a state of `dr
 
 Links an employee, organization, and payroll period. Money columns use `numeric(14,2)` for basic, gross, deductions, and net salary; negative amounts are rejected. Status is limited to `draft`, `calculated`, `reviewed`, `published`, or `void`. One employee can have at most one payslip for a non-null payroll period.
 
-`salary_structures`, `salary_components`, and `payslip_items` are currently name/description scaffolds and are not linked to employees, periods, or payslips.
+`salary_structures` and `salary_components` are organization-scoped name/description catalogs with nullable organization foreign keys. A non-null `(organization_id, name)` pair is unique for salary structures. They are not connected to employees or to payslip calculations, and `payslip_items` remains an unlinked scaffold.
 
 ## Legacy and incomplete relationships
 
@@ -179,7 +190,8 @@ The schema accurately reflects an incremental application, not a completed norma
 - Notifications use an integer `user_id` without a declared relationship; current services treat it as an employee identifier.
 - Approval requests store integer requestor/approver IDs without declared relationships or a link to the underlying leave/correction record.
 - Activity logs have no actor, employee, organization, resource, or metadata columns.
-- Leave policies, salary structures/components, payslip items, work-schedule days, and workdays are not tenant-scoped or relationally connected.
+- Leave policies and salary structures/components have nullable organization foreign keys but no relationship to leave types, employees, compensation assignments, or payslip calculations.
+- Payslip items, work-schedule days, and workdays are not tenant-scoped or relationally connected to the active payroll/schedule models.
 
 These limitations should be resolved with new append-only migrations rather than editing migration history.
 
@@ -198,7 +210,7 @@ bun run db:migrate
 bun run db:seed
 ```
 
-Recommended preflight checks before applying the latest migration:
+Recommended preflight checks before applying the generated migrations:
 
 1. Find duplicate employee emails and employee numbers.
 2. Find duplicate attendance rows for the same employee and calendar day.
@@ -206,4 +218,5 @@ Recommended preflight checks before applying the latest migration:
 4. Find duplicate employee/payroll-period payslips.
 5. Find orphaned employee, organization, manager, attendance, leave, and payroll references.
 6. Verify legacy leave/payroll text amounts cast cleanly to the target `numeric` types.
-7. Back up or branch the database, apply the migration, then exercise concurrent attendance and leave/payroll workflows.
+7. Decide and validate tenant backfills for existing leave policies, salary structures, and salary components; null organization rows are intentionally invisible to their strict tenant-scoped services.
+8. Back up or branch the database, apply both migrations in order, then exercise concurrent attendance and leave/payroll workflows.

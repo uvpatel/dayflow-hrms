@@ -90,7 +90,9 @@ export async function apiClient<T>(
     const error = new Error(errorMsg);
     (error as Error & { code?: string; details?: unknown; status?: number }).code =
       json.code || (typeof errorPayload === "object" ? errorPayload?.code : undefined);
-    (error as Error & { code?: string; details?: unknown; status?: number }).details = json.details;
+    (error as Error & { code?: string; details?: unknown; status?: number }).details =
+      json.details ??
+      (typeof errorPayload === "object" ? errorPayload?.fields : undefined);
     (error as Error & { code?: string; details?: unknown; status?: number }).status = res.status;
     throw error;
   }

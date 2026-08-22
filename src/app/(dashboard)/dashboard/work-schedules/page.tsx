@@ -15,7 +15,7 @@ function formatMinutes(minutes: number) {
 
 export default function WorkSchedulesPage() {
   const meQuery = useMe();
-  const role = (meQuery.data?.user.role ?? meQuery.data?.employee?.role ?? "employee").toLowerCase();
+  const role = (meQuery.data?.employee?.role ?? meQuery.data?.user.role ?? "employee").toLowerCase();
   const canManage = role === "hr" || role === "admin";
   const schedulesQuery = useWorkSchedules(undefined, { enabled: canManage });
 

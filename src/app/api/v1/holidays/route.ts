@@ -1,54 +1,54 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requirePermission } from "@/lib/auth-context";
-import { db } from "@/db";
-import { holidays } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { NextRequest } from "next/server";
+
+import { createHolidaySchema } from "@/features/organization/organization.schemas";
+import { organizationService } from "@/features/organization/organization.service";
+import {
+  buildPaginationMeta,
+  createdResponse,
+  errorResponse,
+  paginatedResponse,
+  parsePagination,
+  validateBody,
+} from "@/lib/api";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const { error, ctx } = await requireAuth(request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const whereClause = ctx.organizationId ? eq(holidays.organizationId, ctx.organizationId) : undefined;
-    const data = await db.select().from(holidays).where(whereClause).orderBy(desc(holidays.holidayDate));
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "holiday:read");
+    const organizationId = requireOrganization(authContext);
 
-    return NextResponse.json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    console.error("Error fetching holidays:", err);
-    return NextResponse.json({ success: false, error: "Failed to fetch holidays" }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const { page, limit, offset, search } = parsePagination(searchParams, 50);
+    const items = await organizationService.listHolidays(
+      organizationId,
+      limit,
+      offset,
+      search,
+    );
+    const meta = buildPaginationMeta(page, limit, items.length, { search });
+
+    return paginatedResponse(items, meta, "Holidays fetched successfully");
+  } catch (error) {
+    return errorResponse(error);
   }
 }
 
 export async function POST(request: NextRequest) {
-  const { error, ctx } = await requirePermission("organization:manage", request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const body = await request.json();
-    if (!body.name || !body.holidayDate) {
-      return NextResponse.json({ success: false, error: "Holiday name and date are required" }, { status: 400 });
-    }
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "holiday:manage");
+    const organizationId = requireOrganization(authContext);
 
-    const [created] = await db
-      .insert(holidays)
-      .values({
-        name: body.name.trim(),
-        description: body.description?.trim() || null,
-        holidayDate: new Date(body.holidayDate),
-        organizationId: ctx.organizationId,
-      })
-      .returning();
+    const data = await validateBody(request, createHolidaySchema);
+    const created = await organizationService.createHoliday(organizationId, data);
 
-    return NextResponse.json({
-      success: true,
-      message: "Holiday created successfully",
-      data: created,
-    }, { status: 201 });
-  } catch (err) {
-    console.error("Error creating holiday:", err);
-    return NextResponse.json({ success: false, error: "Failed to create holiday" }, { status: 500 });
+    return createdResponse(created, "Holiday created successfully");
+  } catch (error) {
+    return errorResponse(error);
   }
 }

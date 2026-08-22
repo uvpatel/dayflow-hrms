@@ -32,8 +32,14 @@ export class OrganizationRepository {
     return items;
   }
 
-  async findOrganizationById(id: number) {
-    const [item] = await db.select().from(organizations).where(eq(organizations.id, id));
+  async findOrganizationById(actorOrganizationId: number, id: number) {
+    const [item] = await db
+      .select()
+      .from(organizations)
+      .where(and(
+        eq(organizations.id, id),
+        eq(organizations.id, actorOrganizationId),
+      ));
     return item ?? null;
   }
 
@@ -42,11 +48,18 @@ export class OrganizationRepository {
     return created;
   }
 
-  async updateOrganization(id: number, data: Partial<NewOrganization>) {
+  async updateOrganization(
+    actorOrganizationId: number,
+    id: number,
+    data: Partial<NewOrganization>,
+  ) {
     const [updated] = await db
       .update(organizations)
       .set({ ...data, updatedAt: new Date() })
-      .where(eq(organizations.id, id))
+      .where(and(
+        eq(organizations.id, id),
+        eq(organizations.id, actorOrganizationId),
+      ))
       .returning();
     return updated ?? null;
   }

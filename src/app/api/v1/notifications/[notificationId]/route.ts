@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { notifications } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   errorResponse,
   successResponse,
@@ -10,6 +10,7 @@ import {
   NotFoundError,
 } from "@/lib/api";
 import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import { AuthorizationError } from "@/lib/api/errors";
 
 const notificationIdParamSchema = z.object({
   notificationId: z
@@ -28,13 +29,20 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "notification:read");
+    const employeeId = authContext.employee?.id;
+    if (!employeeId) {
+      throw new AuthorizationError("A linked employee profile is required");
+    }
 
     const { notificationId } = await validateParams(params, notificationIdParamSchema);
 
     const [updated] = await db
       .update(notifications)
       .set({ read: 1, updatedAt: new Date() })
-      .where(eq(notifications.id, notificationId))
+      .where(and(
+        eq(notifications.id, notificationId),
+        eq(notifications.userId, employeeId),
+      ))
       .returning();
 
     if (!updated) {
@@ -51,12 +59,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "notification:read");
+    const employeeId = authContext.employee?.id;
+    if (!employeeId) {
+      throw new AuthorizationError("A linked employee profile is required");
+    }
 
     const { notificationId } = await validateParams(params, notificationIdParamSchema);
 
     const [deleted] = await db
       .delete(notifications)
-      .where(eq(notifications.id, notificationId))
+      .where(and(
+        eq(notifications.id, notificationId),
+        eq(notifications.userId, employeeId),
+      ))
       .returning();
 
     if (!deleted) {

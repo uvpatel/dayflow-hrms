@@ -1,39 +1,58 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth-context";
-import { db } from "@/db";
-import { leaveRequests } from "@/db/schema";
-import { count, eq } from "drizzle-orm";
+import type { NextRequest } from "next/server";
+
+import { timeOffService } from "@/features/time-off/time-off.service";
+import { errorResponse, successResponse } from "@/lib/api";
+import { AuthorizationError } from "@/lib/api/errors";
+import { getAuthContext } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const { error, ctx } = await requireAuth(request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const [total] = await db.select({ count: count() }).from(leaveRequests);
-    const [pending] = await db.select({ count: count() }).from(leaveRequests).where(eq(leaveRequests.status, "pending"));
-    const [approved] = await db.select({ count: count() }).from(leaveRequests).where(eq(leaveRequests.status, "approved"));
-    const [rejected] = await db.select({ count: count() }).from(leaveRequests).where(eq(leaveRequests.status, "rejected"));
+    const authContext = await getAuthContext(request);
+    if (authContext.role === "employee") {
+      throw new AuthorizationError(
+        "Leave analytics are available to managers, HR, and administrators",
+      );
+    }
 
-    const summary = {
-      totalRequests: total?.count || 0,
-      pending: pending?.count || 0,
-      approved: approved?.count || 0,
-      rejected: rejected?.count || 0,
-    };
+    const { items } = await timeOffService.listRequestsForActor(
+      authContext,
+      5_000,
+      0,
+    );
+    const byTypeMap = new Map<
+      string,
+      { type: string; count: number; days: number }
+    >();
+    for (const requestItem of items) {
+      const current = byTypeMap.get(requestItem.leaveType) ?? {
+        type: requestItem.leaveType,
+        count: 0,
+        days: 0,
+      };
+      current.count += 1;
+      current.days += Number(requestItem.days ?? 0);
+      byTypeMap.set(requestItem.leaveType, current);
+    }
 
-    const byType = [
-      { type: "Paid Leave", count: 8, days: 16 },
-      { type: "Sick Leave", count: 4, days: 5 },
-      { type: "Casual Leave", count: 3, days: 3 },
-      { type: "Unpaid Leave", count: 1, days: 2 },
-    ];
-
-    return NextResponse.json({
-      success: true,
-      data: { summary, byType },
+    const countStatus = (status: string) =>
+      items.filter((requestItem) => requestItem.status === status).length;
+    return successResponse({
+      summary: {
+        totalRequests: items.length,
+        pending: countStatus("pending"),
+        approved: countStatus("approved"),
+        rejected: countStatus("rejected"),
+        cancelled: countStatus("cancelled"),
+        totalDays: items.reduce(
+          (total, requestItem) => total + Number(requestItem.days ?? 0),
+          0,
+        ),
+      },
+      byType: [...byTypeMap.values()].sort(
+        (left, right) => right.days - left.days,
+      ),
     });
-  } catch (err) {
-    console.error("Error generating leave report:", err);
-    return NextResponse.json({ success: false, error: "Failed to generate leave report" }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error);
   }
 }

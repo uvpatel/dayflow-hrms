@@ -31,8 +31,6 @@ export type Permission =
   | "employee:delete"
   | "organization:read"
   | "organization:manage"
-  | "org:read"
-  | "org:manage"
   | "department:read"
   | "department:manage"
   | "designation:read"
@@ -64,7 +62,6 @@ const EMPLOYEE_PERMISSIONS = [
   "payroll:read:self",
   "employee:read:self",
   "organization:read",
-  "org:read",
   "department:read",
   "designation:read",
   "location:read",
@@ -95,6 +92,11 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:read:any",
     "employee:create",
     "employee:update",
+    "department:manage",
+    "designation:manage",
+    "location:manage",
+    "holiday:manage",
+    "schedule:manage",
     "notification:manage",
     "audit:read",
     "approval:read",
@@ -119,7 +121,6 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "employee:update",
     "employee:delete",
     "organization:manage",
-    "org:manage",
     "department:manage",
     "designation:manage",
     "location:manage",

@@ -9,8 +9,8 @@ import {
   Plus,
   RefreshCw,
   Lock,
+  Send,
   ArrowRight,
-  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -23,6 +23,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tabs,
   TabsContent,
@@ -55,7 +62,12 @@ import {
   useCreatePeriod,
   useCalculatePayroll,
   useFinalizePayroll,
+  usePublishPayroll,
+  useCreatePayslip,
+  useCreateSalaryStructure,
+  useUpdateSalaryStructure,
 } from "@/hooks/use-payroll";
+import { useEmployees } from "@/hooks/use-employees";
 
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState("periods");
@@ -65,19 +77,38 @@ export default function PayrollPage() {
   const [newPeriodName, setNewPeriodName] = useState("");
   const [newPeriodStart, setNewPeriodStart] = useState("");
   const [newPeriodEnd, setNewPeriodEnd] = useState("");
+  const [isPayslipDialogOpen, setIsPayslipDialogOpen] = useState(false);
+  const [payslipEmployeeId, setPayslipEmployeeId] = useState("");
+  const [payslipPeriodId, setPayslipPeriodId] = useState("");
+  const [payslipBasic, setPayslipBasic] = useState("");
+  const [payslipGross, setPayslipGross] = useState("");
+  const [payslipDeductions, setPayslipDeductions] = useState("0.00");
+  const [isStructureDialogOpen, setIsStructureDialogOpen] = useState(false);
+  const [editingStructureId, setEditingStructureId] = useState<number | null>(null);
+  const [structureName, setStructureName] = useState("");
+  const [structureDescription, setStructureDescription] = useState("");
 
   // TanStack Query Hooks
   const { data: periodsData, isLoading: periodsLoading, refetch: refetchPeriods } = usePayrollPeriods({ limit: 50 });
   const { data: structuresData, isLoading: structuresLoading, refetch: refetchStructures } = useSalaryStructures();
   const { data: payslipsData, refetch: refetchPayslips } = usePayslips({ limit: 50 });
+  const { data: employeesData } = useEmployees({ limit: 500 });
 
   const createPeriodMutation = useCreatePeriod();
   const calculatePayrollMutation = useCalculatePayroll();
   const finalizePayrollMutation = useFinalizePayroll();
+  const publishPayrollMutation = usePublishPayroll();
+  const createPayslipMutation = useCreatePayslip();
+  const createStructureMutation = useCreateSalaryStructure();
+  const updateStructureMutation = useUpdateSalaryStructure();
 
   const periods = periodsData?.items ?? [];
   const structures = structuresData ?? [];
   const payslips = payslipsData?.items ?? [];
+  const employees = employeesData?.items ?? [];
+  const publishedNetPayroll = payslips
+    .filter((payslip) => payslip.status === "published")
+    .reduce((total, payslip) => total + Number(payslip.netSalary ?? 0), 0);
 
   const handleRefresh = () => {
     refetchPeriods();
@@ -97,6 +128,8 @@ export default function PayrollPage() {
       await createPeriodMutation.mutateAsync({
         name: newPeriodName.trim(),
         description: `Payroll cycle for ${newPeriodName}`,
+        ...(newPeriodStart && { startDate: newPeriodStart }),
+        ...(newPeriodEnd && { endDate: newPeriodEnd }),
       });
       toast.success("Payroll period created successfully!");
       setIsPeriodDialogOpen(false);
@@ -119,6 +152,71 @@ export default function PayrollPage() {
     }
   };
 
+  const handleCreatePayslip = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const employeeId = Number(payslipEmployeeId);
+    const payrollPeriodId = Number(payslipPeriodId);
+    if (!employeeId || !payrollPeriodId || !payslipGross) {
+      toast.error("Select an employee and draft period, then enter gross salary");
+      return;
+    }
+
+    try {
+      await createPayslipMutation.mutateAsync({
+        employeeId,
+        payrollPeriodId,
+        grossSalary: payslipGross,
+        deductions: payslipDeductions || "0.00",
+        ...(payslipBasic && { basicSalary: payslipBasic }),
+      });
+      toast.success("Draft payslip created with server-calculated net pay");
+      setIsPayslipDialogOpen(false);
+      setPayslipEmployeeId("");
+      setPayslipPeriodId("");
+      setPayslipBasic("");
+      setPayslipGross("");
+      setPayslipDeductions("0.00");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Could not create payslip");
+    }
+  };
+
+  const openStructureDialog = (structure?: (typeof structures)[number]) => {
+    setEditingStructureId(structure?.id ?? null);
+    setStructureName(structure?.name ?? "");
+    setStructureDescription(structure?.description ?? "");
+    setIsStructureDialogOpen(true);
+  };
+
+  const handleSaveStructure = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (structureName.trim().length < 2) {
+      toast.error("Structure name must contain at least two characters");
+      return;
+    }
+    try {
+      if (editingStructureId) {
+        await updateStructureMutation.mutateAsync({
+          id: editingStructureId,
+          name: structureName.trim(),
+          description: structureDescription.trim(),
+        });
+        toast.success("Salary structure updated");
+      } else {
+        await createStructureMutation.mutateAsync({
+          name: structureName.trim(),
+          description: structureDescription.trim(),
+        });
+        toast.success("Salary structure created");
+      }
+      setIsStructureDialogOpen(false);
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not save salary structure",
+      );
+    }
+  };
+
   const handleFinalizePeriod = async (id: number) => {
     try {
       await finalizePayrollMutation.mutateAsync(id);
@@ -126,6 +224,15 @@ export default function PayrollPage() {
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Finalize failed";
       toast.error(errorMsg);
+    }
+  };
+
+  const handlePublishPeriod = async (id: number) => {
+    try {
+      await publishPayrollMutation.mutateAsync(id);
+      toast.success(`Payroll period #${id} published to employees`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Publish failed");
     }
   };
 
@@ -147,6 +254,82 @@ export default function PayrollPage() {
             <RefreshCw className="size-4" />
             Refresh
           </Button>
+
+          <Dialog open={isPayslipDialogOpen} onOpenChange={setIsPayslipDialogOpen}>
+            <DialogTrigger>
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <Wallet className="size-4" />
+                New Payslip
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <form onSubmit={handleCreatePayslip}>
+                <DialogHeader>
+                  <DialogTitle>Create Draft Payslip</DialogTitle>
+                  <DialogDescription>
+                    Net pay is derived by the server. Drafts must be calculated,
+                    finalized, and published before employees can see them.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="payslip-employee">Employee</Label>
+                    <Select value={payslipEmployeeId} onValueChange={(value) => setPayslipEmployeeId(value ?? "")}>
+                      <SelectTrigger id="payslip-employee">
+                        <SelectValue placeholder="Select employee" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {employees.map((employee) => (
+                          <SelectItem key={employee.id} value={employee.id.toString()}>
+                            {employee.firstName} {employee.lastName} ({employee.employeeNumber ?? employee.id})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="payslip-period">Draft pay period</Label>
+                    <Select value={payslipPeriodId} onValueChange={(value) => setPayslipPeriodId(value ?? "")}>
+                      <SelectTrigger id="payslip-period">
+                        <SelectValue placeholder="Select draft period" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {periods
+                          .filter((period) => period.status === "draft")
+                          .map((period) => (
+                            <SelectItem key={period.id} value={period.id.toString()}>
+                              {period.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="payslip-basic">Basic</Label>
+                      <Input id="payslip-basic" inputMode="decimal" value={payslipBasic} onChange={(event) => setPayslipBasic(event.target.value)} placeholder="7500.00" />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="payslip-gross">Gross</Label>
+                      <Input id="payslip-gross" inputMode="decimal" value={payslipGross} onChange={(event) => setPayslipGross(event.target.value)} placeholder="9200.00" required />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="payslip-deductions">Deductions</Label>
+                      <Input id="payslip-deductions" inputMode="decimal" value={payslipDeductions} onChange={(event) => setPayslipDeductions(event.target.value)} required />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsPayslipDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={createPayslipMutation.isPending}>
+                    {createPayslipMutation.isPending ? "Creating…" : "Create draft"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={isPeriodDialogOpen} onOpenChange={setIsPeriodDialogOpen}>
             <DialogTrigger  >
@@ -217,14 +400,18 @@ export default function PayrollPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardDescription>Monthly Payroll Run</CardDescription>
+            <CardDescription>Published Net Payroll</CardDescription>
             <DollarSign className="size-5 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">$142,500.00</div>
+            <div className="text-2xl font-bold">
+              {new Intl.NumberFormat(undefined, {
+                style: "currency",
+                currency: "USD",
+              }).format(publishedNetPayroll)}
+            </div>
             <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-              <TrendingUp className="size-3.5 text-emerald-500" />
-              <span>Standard gross disbursement</span>
+              <span>Visible to employees after publication</span>
             </div>
           </CardContent>
         </Card>
@@ -235,7 +422,9 @@ export default function PayrollPage() {
             <Calendar className="size-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{periods.length || 1}</div>
+            <div className="text-2xl font-bold">
+              {periods.filter((period) => period.status !== "published").length}
+            </div>
             <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
               <span>{periods.filter((p) => p.status === "draft").length} in draft status</span>
             </div>
@@ -248,7 +437,7 @@ export default function PayrollPage() {
             <Layers className="size-5 text-indigo-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{structures.length || 3}</div>
+            <div className="text-2xl font-bold">{structures.length}</div>
             <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
               <Link href="/dashboard/payroll/salary-structures" className="text-primary hover:underline flex items-center gap-1">
                 <span>Manage structures</span>
@@ -264,7 +453,7 @@ export default function PayrollPage() {
             <Wallet className="size-5 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{payslips.length || 20}</div>
+            <div className="text-2xl font-bold">{payslips.length}</div>
             <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
               <span>Ready for download &amp; preview</span>
             </div>
@@ -317,8 +506,9 @@ export default function PayrollPage() {
                   ) : (
                     periods.map((period) => {
                       const isDraft = period.status === "draft";
-                      const isCalculated = period.status === "calculated";
+                      const isReview = period.status === "review";
                       const isFinalized = period.status === "finalized";
+                      const isPublished = period.status === "published";
 
                       return (
                         <TableRow key={period.id}>
@@ -334,7 +524,11 @@ export default function PayrollPage() {
                           <TableCell>
                             <Badge
                               variant={
-                                isFinalized ? "default" : isCalculated ? "secondary" : "outline"
+                                isPublished || isFinalized
+                                  ? "default"
+                                  : isReview
+                                    ? "secondary"
+                                    : "outline"
                               }
                               className="capitalize"
                             >
@@ -353,7 +547,7 @@ export default function PayrollPage() {
                                   Calculate
                                 </Button>
                               )}
-                              {isCalculated && (
+                              {isReview && (
                                 <Button
                                   size="sm"
                                   variant="default"
@@ -366,7 +560,18 @@ export default function PayrollPage() {
                                 </Button>
                               )}
                               {isFinalized && (
-                                <span className="text-xs text-muted-foreground">Completed</span>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handlePublishPeriod(period.id)}
+                                  disabled={publishPayrollMutation.isPending}
+                                  className="gap-1"
+                                >
+                                  <Send className="size-3.5" />
+                                  Publish to employees
+                                </Button>
+                              )}
+                              {isPublished && (
+                                <span className="text-xs text-muted-foreground">Published</span>
                               )}
                             </div>
                           </TableCell>
@@ -383,6 +588,18 @@ export default function PayrollPage() {
         {/* Salary Structures Tab */}
         <TabsContent value="structures">
           <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Salary Structures</CardTitle>
+                <CardDescription>
+                  Maintain the compensation structures available to this organization.
+                </CardDescription>
+              </div>
+              <Button size="sm" onClick={() => openStructureDialog()}>
+                <Plus className="mr-1 size-4" />
+                New Structure
+              </Button>
+            </CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
@@ -391,18 +608,19 @@ export default function PayrollPage() {
                     <TableHead>Description</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {structuresLoading ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
                         Loading salary structures...
                       </TableCell>
                     </TableRow>
                   ) : structures.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
                         No salary structures configured yet.
                       </TableCell>
                     </TableRow>
@@ -421,6 +639,15 @@ export default function PayrollPage() {
                         <TableCell>
                           <Badge variant="default">Active</Badge>
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openStructureDialog(struct)}
+                          >
+                            Edit
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -430,6 +657,53 @@ export default function PayrollPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={isStructureDialogOpen} onOpenChange={setIsStructureDialogOpen}>
+        <DialogContent>
+          <form onSubmit={handleSaveStructure}>
+            <DialogHeader>
+              <DialogTitle>
+                {editingStructureId ? "Edit Salary Structure" : "New Salary Structure"}
+              </DialogTitle>
+              <DialogDescription>
+                Structure records are isolated to your organization.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="structure-name">Name</Label>
+                <Input
+                  id="structure-name"
+                  value={structureName}
+                  onChange={(event) => setStructureName(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="structure-description">Description</Label>
+                <Input
+                  id="structure-description"
+                  value={structureDescription}
+                  onChange={(event) => setStructureDescription(event.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsStructureDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={createStructureMutation.isPending || updateStructureMutation.isPending}
+              >
+                {createStructureMutation.isPending || updateStructureMutation.isPending
+                  ? "Saving…"
+                  : "Save structure"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

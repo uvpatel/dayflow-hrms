@@ -143,6 +143,7 @@ export class AttendanceService {
         isLate: isLateCheckIn(now, schedule),
       });
       await logActivity({
+        organizationId: employee.organizationId,
         action: "ATTENDANCE_CHECKED_IN",
         description: `Employee #${employee.id} checked in`,
       });
@@ -210,6 +211,7 @@ export class AttendanceService {
     }
 
     await logActivity({
+      organizationId: employee.organizationId,
       action: "ATTENDANCE_CHECKED_OUT",
       description: `Employee #${employee.id} checked out after ${calculation.workMinutes} work minutes`,
     });
@@ -426,7 +428,7 @@ export class AttendanceService {
       : defaultAttendanceSchedule(organizationTimezone);
     const workDate = getWorkDate(correction.correctionDate, currentSchedule.timezone);
 
-    let attendance = correction.attendanceId
+    const attendance = correction.attendanceId
       ? await attendanceRepository.findAttendanceById(correction.attendanceId)
       : await attendanceRepository.findAttendanceForWorkDate(subject.id, workDate);
     if (

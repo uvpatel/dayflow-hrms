@@ -12,7 +12,7 @@ import { useMe } from "@/hooks/use-me";
 
 export default function MyTeamPage() {
   const meQuery = useMe();
-  const role = (meQuery.data?.user.role ?? meQuery.data?.employee?.role ?? "employee").toLowerCase();
+  const role = (meQuery.data?.employee?.role ?? meQuery.data?.user.role ?? "employee").toLowerCase();
   const canViewTeam = role === "manager" || role === "hr" || role === "admin";
   const teamQuery = useMyTeam({ enabled: canViewTeam });
 

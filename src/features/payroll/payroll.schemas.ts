@@ -16,7 +16,6 @@ export const updatePayrollPeriodSchema = z.object({
   description: z.string().nullable().optional(),
   startDate: z.string().or(z.date()).transform((value) => new Date(value)).nullable().optional(),
   endDate: z.string().or(z.date()).transform((value) => new Date(value)).nullable().optional(),
-  status: z.enum(["draft", "calculating", "review", "finalized", "published"]).optional(),
 }).strict();
 
 // Salary Structure
@@ -46,8 +45,6 @@ export const createPayslipSchema = z.object({
   basicSalary: z.string().regex(/^\d+(?:\.\d{1,2})?$/).optional(),
   grossSalary: z.string().regex(/^\d+(?:\.\d{1,2})?$/),
   deductions: z.string().regex(/^\d+(?:\.\d{1,2})?$/).default("0"),
-  netSalary: z.string().regex(/^\d+(?:\.\d{1,2})?$/),
-  status: z.enum(["draft", "calculated", "reviewed", "published", "void"]).default("draft"),
 }).strict();
 
 export const updatePayslipSchema = createPayslipSchema

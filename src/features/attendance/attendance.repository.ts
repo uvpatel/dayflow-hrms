@@ -364,8 +364,15 @@ export class AttendanceRepository {
         from decision_write
         returning id
       ), audit_write as (
-        insert into activity_logs (action, description, created_at, updated_at)
+        insert into activity_logs (
+          organization_id,
+          action,
+          description,
+          created_at,
+          updated_at
+        )
         select
+          ${input.organizationId},
           case
             when decision_write.status = 'approved' then 'ATTENDANCE_CORRECTION_APPROVED'
             else 'ATTENDANCE_CORRECTION_REJECTED'

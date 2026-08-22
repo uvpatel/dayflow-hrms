@@ -9,17 +9,27 @@ import {
   buildPaginationMeta,
   validateBody,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "designation:read");
+    const organizationId = requireOrganization(authContext);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, offset, search } = parsePagination(searchParams, 50);
 
-    const items = await organizationService.listDesignations(limit, offset, search);
+    const items = await organizationService.listDesignations(
+      organizationId,
+      limit,
+      offset,
+      search,
+    );
     const meta = buildPaginationMeta(page, limit, items.length, { search });
 
     return paginatedResponse(items, meta, "Designations fetched successfully");
@@ -32,9 +42,10 @@ export async function POST(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "designation:manage");
+    const organizationId = requireOrganization(authContext);
 
     const data = await validateBody(request, createDesignationSchema);
-    const created = await organizationService.createDesignation(data);
+    const created = await organizationService.createDesignation(organizationId, data);
 
     return createdResponse(created, "Designation created successfully");
   } catch (error) {

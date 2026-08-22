@@ -1,61 +1,55 @@
-import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, requirePermission } from "@/lib/auth-context";
+import type { NextRequest } from "next/server";
+
 import { db } from "@/db";
 import { organizations } from "@/db/schema";
+import { updateOrganizationSchema } from "@/features/organization/organization.schemas";
+import {
+  errorResponse,
+  successResponse,
+  validateBody,
+} from "@/lib/api";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 import { eq } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
-  const { error, ctx } = await requireAuth(request.headers);
-  if (error || !ctx) return error!;
-
   try {
-    const whereClause = ctx.organizationId ? eq(organizations.id, ctx.organizationId) : undefined;
-    const data = await db.select().from(organizations).where(whereClause);
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "organization:read");
+    const organizationId = requireOrganization(authContext);
+    const data = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, organizationId));
 
-    return NextResponse.json({
-      success: true,
-      data,
-    });
-  } catch (err) {
-    console.error("Error fetching organization:", err);
-    return NextResponse.json({ success: false, error: "Failed to fetch organization" }, { status: 500 });
+    return successResponse(data);
+  } catch (error) {
+    return errorResponse(error);
   }
 }
 
 export async function PATCH(request: NextRequest) {
-  const { error, ctx } = await requirePermission("organization:manage", request.headers);
-  if (error || !ctx) return error!;
-
-  if (!ctx.organizationId) {
-    return NextResponse.json({ success: false, error: "Organization not found" }, { status: 404 });
-  }
-
   try {
-    const body = await request.json();
-    const updateData: { name?: string; description?: string | null; updatedAt: Date } = {
-      updatedAt: new Date(),
-    };
-
-    if (body.name && typeof body.name === "string" && body.name.trim()) {
-      updateData.name = body.name.trim();
-    }
-    if (body.description !== undefined) {
-      updateData.description = typeof body.description === "string" ? body.description : null;
-    }
+    const authContext = await getAuthContext(request);
+    requirePermission(authContext, "organization:manage");
+    const organizationId = requireOrganization(authContext);
+    const data = await validateBody(request, updateOrganizationSchema);
 
     const [updated] = await db
       .update(organizations)
-      .set(updateData)
-      .where(eq(organizations.id, ctx.organizationId))
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(organizations.id, organizationId))
       .returning();
 
-    return NextResponse.json({
-      success: true,
-      message: "Organization updated successfully",
-      data: updated,
-    });
-  } catch (err) {
-    console.error("Error updating organization:", err);
-    return NextResponse.json({ success: false, error: "Failed to update organization" }, { status: 500 });
+    return successResponse(
+      updated,
+      undefined,
+      "Organization updated successfully",
+    );
+  } catch (error) {
+    return errorResponse(error);
   }
 }

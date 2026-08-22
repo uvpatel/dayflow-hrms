@@ -8,7 +8,11 @@ import {
   validateParams,
   numericIdParamSchema,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -17,10 +21,11 @@ type RouteParams = {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "org:read");
+    requirePermission(authContext, "organization:read");
+    const organizationId = requireOrganization(authContext);
 
     const { id } = await validateParams(params, numericIdParamSchema);
-    const org = await organizationService.getOrganization(id);
+    const org = await organizationService.getOrganization(organizationId, id);
 
     return successResponse(org, undefined, `Organization ${id} fetched successfully`);
   } catch (error) {
@@ -31,11 +36,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const authContext = await getAuthContext(request);
-    requirePermission(authContext, "org:manage");
+    requirePermission(authContext, "organization:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { id } = await validateParams(params, numericIdParamSchema);
     const data = await validateBody(request, updateOrganizationSchema);
-    const updated = await organizationService.updateOrganization(id, data);
+    const updated = await organizationService.updateOrganization(
+      organizationId,
+      id,
+      data,
+    );
 
     return successResponse(updated, undefined, `Organization ${id} updated successfully`);
   } catch (error) {

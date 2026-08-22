@@ -54,7 +54,7 @@ Common statuses are `400` for invalid input, `401` for no session, `403` for ins
 | `PATCH` | `/api/v1/me` | Updates the current employee's validated name, email, or phone fields |
 | `GET` | `/api/v1/me/attendance` | Returns attendance belonging to the current employee |
 | `GET` | `/api/v1/me/time-off` | Returns the current employee's allocations and requests |
-| `GET` | `/api/v1/me/payslips` | Returns up to 50 current-employee payslips; published-status filtering is implementation-dependent |
+| `GET` | `/api/v1/me/payslips` | Returns up to 50 published payslips belonging to the current employee |
 
 ## Employees and managers
 
@@ -66,7 +66,7 @@ Common statuses are `400` for invalid input, `401` for no session, `403` for ins
 | `PATCH` | `/api/v1/employees/:employeeId` | Self-field allowlist or HR/admin organization update; only admin may promote to admin |
 | `DELETE` | `/api/v1/employees/:employeeId` | Admin; sets employment status to `inactive` rather than deleting the row |
 | `GET` | `/api/v1/employees/:employeeId/attendance` | Self, direct report, or organization-scoped HR/admin |
-| `GET` | `/api/v1/employees/:employeeId/time-off` | Self/team/organization according to the handler's resource scope |
+| `GET` | `/api/v1/employees/:employeeId/time-off` | Self, assigned direct report, or organization-scoped HR/admin |
 | `GET` | `/api/v1/employees/:employeeId/payslips` | Self or HR/admin; managers remain self-only for payroll |
 | `PATCH` | `/api/v1/employees/:employeeId/manager` | HR/admin assign or clear a manager |
 | `GET` | `/api/v1/managers/me/team` | Current manager's direct reports |
@@ -86,10 +86,11 @@ Manager assignment validates same-organization membership, active manager status
 | `GET`, `PATCH`, `DELETE` | `/api/v1/attendance/:attendanceId` | Row-scoped read; privileged mutation |
 | `GET`, `POST` | `/api/v1/attendance/corrections` | Role-scoped list or current-employee correction request |
 | `GET`, `PATCH`, `DELETE` | `/api/v1/attendance/corrections/:correctionId` | Row-scoped read; privileged mutation |
+| `POST` | `/api/v1/attendance/corrections/:correctionId/decision` | Assigned manager or organization HR/admin approves or rejects a pending correction |
 
 Check-in/out bodies do not accept an authoritative employee ID or timestamp. The service derives work date and lateness from the applicable employee/organization timezone and schedule. Check-out calculates break, work, overtime, decimal display hours, and present/half-day status.
 
-The generated migration adds one-record-per-employee/workday and one-open-record-per-employee unique indexes. Until that migration is applied, a database does not have those new guarantees. Duplicate/open conflicts are mapped to `409` when the database reports a unique violation.
+Correction decisions require a rejection comment when rejected and atomically update or create the attendance record, resolve the correction, notify the employee, and write an activity record. The generated migration adds one-record-per-employee/workday and one-open-record-per-employee unique indexes. Until that migration is applied, a database does not have those new guarantees. Duplicate/open conflicts are mapped to `409` when the database reports a unique violation.
 
 ## Leave and approvals
 
@@ -97,22 +98,26 @@ The generated migration adds one-record-per-employee/workday and one-open-record
 
 | Methods | Path family | Current purpose |
 | --- | --- | --- |
-| `GET`, `POST` | `/api/v1/leave-types` | List types; privileged create |
-| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-types/:leaveTypeId` | Read or privileged mutation |
-| `GET`, `POST` | `/api/v1/leave-policies` | List policies; privileged create |
-| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-policies/:policyId` | Read or privileged mutation |
-| `GET`, `POST` | `/api/v1/leave-allocations` | List allocations; privileged create |
-| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-allocations/:allocationId` | Read or privileged mutation |
-| `GET`, `POST` | `/api/v1/leave-requests` | Role-filtered list or request submission |
-| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-requests/:requestId` | Read, update/cancel, or delete one request according to the current handler |
-| `POST` | `/api/v1/leave-requests/:requestId/approve` | Privileged pending-request decision |
-| `POST` | `/api/v1/leave-requests/:requestId/reject` | Privileged pending-request decision |
-| `GET`, `POST` | `/api/v1/approvals` | Generic approval list/create |
-| `GET`, `PATCH`, `DELETE` | `/api/v1/approvals/:approvalId` | Generic approval read/mutation |
-| `POST` | `/api/v1/approvals/:approvalId/approve` | Privileged approval action |
-| `POST` | `/api/v1/approvals/:approvalId/reject` | Privileged rejection action |
+| `GET`, `POST` | `/api/v1/leave-types` | List available organization/global types; HR/admin create an organization type |
+| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-types/:leaveTypeId` | Organization-visible read; HR/admin organization mutation |
+| `GET`, `POST` | `/api/v1/leave-policies` | Organization list; HR/admin organization create |
+| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-policies/:policyId` | Organization read; HR/admin organization mutation |
+| `GET`, `POST` | `/api/v1/leave-allocations` | Self/team/organization list; HR/admin organization create |
+| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-allocations/:allocationId` | Self/team/organization read; HR/admin organization mutation |
+| `GET`, `POST` | `/api/v1/leave-requests` | Self/team/organization list or request submission |
+| `GET`, `PATCH`, `DELETE` | `/api/v1/leave-requests/:requestId` | Actor-scoped read; owner-only pending edit; owner-only pending cancellation (`DELETE` does not remove the row) |
+| `POST` | `/api/v1/leave-requests/:requestId/cancel` | Owner-only pending cancellation |
+| `POST` | `/api/v1/leave-requests/:requestId/decision` | Assigned manager or organization HR/admin approves/rejects a pending request |
+| `POST` | `/api/v1/leave-requests/:requestId/approve` | Compatibility approval route using the same decision service |
+| `POST` | `/api/v1/leave-requests/:requestId/reject` | Compatibility rejection route using the same decision service |
+| `GET`, `POST` | `/api/v1/approvals` | Direct-report/organization-scoped generic list; HR/admin create |
+| `GET`, `PATCH`, `DELETE` | `/api/v1/approvals/:approvalId` | Scoped read; HR/admin reassignment; admin pending-row deletion |
+| `POST` | `/api/v1/approvals/:approvalId/approve` | Scoped reviewer resolves a pending generic approval |
+| `POST` | `/api/v1/approvals/:approvalId/reject` | Scoped reviewer rejects with a required reason |
 
-Leave requests calculate inclusive full/half-day duration and validate overlap/balance. The final integration must be verified for actor-scoped single-resource reads, pending-only cancellation, required rejection comments, transaction boundaries, allocation updates, notifications, and audit metadata. The generic `approval_requests` table remains separate scaffolding without a database relation to its underlying leave/correction resource.
+Leave duration uses the employee schedule, excludes organization holidays, and supports full- or half-day requests. Submission and pending edits serialize per employee with a PostgreSQL advisory transaction lock and enforce overlap and balance rules. Decisions enforce self/team/organization scope, require a rejection comment, and use one SQL statement for request state, balance, notification, activity, and approved-day attendance writes.
+
+The generic `approval_requests` workflow is independently scoped to assigned direct reports for managers and the organization for HR/admin. It remains a parallel record without a database relation to its underlying leave/correction resource; its decision, notification, and activity writes are separate operations rather than one database transaction.
 
 ## Payroll
 
@@ -122,24 +127,27 @@ Leave requests calculate inclusive full/half-day duration and validate overlap/b
 | `GET`, `PATCH`, `DELETE` | `/api/v1/payroll/periods/:periodId` | Privileged period operations |
 | `POST` | `/api/v1/payroll/periods/:periodId/calculate` | Payroll calculation action |
 | `POST` | `/api/v1/payroll/periods/:periodId/finalize` | Payroll finalize action |
+| `POST` | `/api/v1/payroll/periods/:periodId/publish` | Publish a finalized period and its reviewed payslips |
 | `GET`, `POST` | `/api/v1/payroll/payslips` | Privileged list/create payslips |
 | `GET`, `PATCH`, `DELETE` | `/api/v1/payroll/payslips/:payslipId` | Privileged payslip operations |
 | `GET`, `POST` | `/api/v1/salary-structures` | Privileged salary-structure operations |
 | `GET`, `PATCH`, `DELETE` | `/api/v1/salary-structures/:salaryStructureId` | Privileged salary-structure operations |
 
-The permission map grants organization-wide payroll only to HR/admin; managers have self payroll only. Payroll calculations, status locking, publication visibility, and cross-organization checks must be verified with integration tests before treating this surface as a production payroll engine.
+The permission map grants organization-wide payroll only to HR/admin; managers have self payroll only. Draft payslip create/update derives net salary from exact-cent gross and deductions and rejects deductions above gross. Calculation atomically derives net values and moves draft payslips/period to `calculated`/`review`; finalization validates those values and moves them to `reviewed`/`finalized`; publication moves reviewed payslips and the period to `published`. Finalized and published data is locked, and employee/self endpoints expose only published payslips.
+
+This is a controlled visibility and lifecycle workflow, not a statutory payroll engine: salary structures/components and `payslip_items` are not used to calculate taxes, benefits, or compensation formulas. The lifecycle and transaction behavior still require database-backed integration and concurrency verification.
 
 ## Organization, notifications, reports, and audit
 
 | Methods | Path family | Current access |
 | --- | --- | --- |
-| `GET`, `PATCH` | `/api/v1/organizations`, `/api/v1/organizations/:id` | Organization reads and privileged updates |
-| CRUD | `/api/v1/departments`, `/designations`, `/locations`, `/work-schedules`, `/holidays` | Broadly available reference reads and privileged mutations |
-| `GET`, `POST`, `PATCH`, `DELETE` | `/api/v1/notifications` and item/read-all routes | Employee read plus privileged creation/mutation operations |
-| `GET` | `/api/v1/reports/dashboard`, `/attendance`, `/leave`, `/payroll` | Role-appropriate reporting endpoints |
+| `GET`, `PATCH` | `/api/v1/organizations`, `/api/v1/organizations/:id` | Organization reads; admin updates |
+| CRUD | `/api/v1/departments`, `/designations`, `/locations`, `/work-schedules`, `/holidays` | Organization-scoped reads; HR/admin mutations; schedule reads additionally use self/team scope |
+| `GET`, `POST`, `PATCH`, `DELETE` | `/api/v1/notifications` and item/read-all routes | Current employee reads/marks/deletes own rows; HR/admin send only to same-organization recipients |
+| `GET` | `/api/v1/reports/dashboard`, `/attendance`, `/leave`, `/payroll` | Persisted organization/team aggregates; operational reports exclude employees and payroll report is HR/admin only |
 | `GET` | `/api/v1/activity-logs` | Users with audit-read permission |
 
-Report handlers must aggregate persisted, actor-scoped data. Any sample trends, fixed totals, or fallback department data found during verification are implementation gaps, not authoritative analytics.
+Report handlers aggregate persisted, actor-scoped data; they no longer use hard-coded sample trends or totals. Dashboard recent activity intentionally omits `activity_logs` because that legacy table has no organization key and cannot yet be safely tenant-filtered.
 
 ## Pagination and filters
 
@@ -149,4 +157,4 @@ When a shared paginated response is used, `meta.total` is the matching row count
 
 ## Verification status
 
-At the 2026-08-22 documentation checkpoint, the generated schema migration had not been applied, the seed had not been run, and no database-backed API integration tests had been executed. The 20 passing unit tests cover pure permission/redirect and attendance/manager/leave domain rules; they do not prove route transactionality, database constraints, tenant isolation under real data, or concurrent behavior.
+At the 2026-08-22 documentation checkpoint, neither generated schema migration had been applied, the seed had not been run, and no database-backed API integration tests had been executed. The 26 passing unit tests cover pure permission/redirect and attendance, manager, leave, and payroll domain rules; they do not prove route transactionality, database constraints, tenant isolation under real data, or concurrent behavior.

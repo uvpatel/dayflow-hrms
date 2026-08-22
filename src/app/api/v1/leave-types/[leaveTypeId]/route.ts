@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:read:self");
 
     const { leaveTypeId } = await validateParams(params, leaveTypeIdParamSchema);
-    const item = await timeOffService.getLeaveType(leaveTypeId);
+    const item = await timeOffService.getLeaveType(authContext, leaveTypeId);
 
     return successResponse(item, undefined, `Leave type ${leaveTypeId} fetched successfully`);
   } catch (error) {
@@ -44,7 +44,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { leaveTypeId } = await validateParams(params, leaveTypeIdParamSchema);
     const data = await validateBody(request, updateLeaveTypeSchema);
-    const updated = await timeOffService.updateLeaveType(leaveTypeId, data);
+    const updated = await timeOffService.updateLeaveType(
+      authContext,
+      leaveTypeId,
+      data,
+    );
 
     return successResponse(updated, undefined, `Leave type ${leaveTypeId} updated successfully`);
   } catch (error) {
@@ -58,7 +62,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:manage");
 
     const { leaveTypeId } = await validateParams(params, leaveTypeIdParamSchema);
-    const deleted = await timeOffService.deleteLeaveType(leaveTypeId);
+    const deleted = await timeOffService.deleteLeaveType(authContext, leaveTypeId);
 
     return successResponse(deleted, undefined, `Leave type ${leaveTypeId} deleted successfully`);
   } catch (error) {

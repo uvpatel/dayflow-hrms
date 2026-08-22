@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination(searchParams, 50);
 
-    const items = await timeOffService.listLeaveTypes(limit, offset);
+    const items = await timeOffService.listLeaveTypes(authContext, limit, offset);
     const meta = buildPaginationMeta(page, limit, items.length);
 
     return paginatedResponse(items, meta, "Leave types fetched successfully");
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     requirePermission(authContext, "leave:manage");
 
     const data = await validateBody(request, createLeaveTypeSchema);
-    const created = await timeOffService.createLeaveType(data);
+    const created = await timeOffService.createLeaveType(authContext, data);
 
     return createdResponse(created, "Leave type created successfully");
   } catch (error) {

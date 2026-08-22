@@ -13,12 +13,7 @@ import {
   LogOut,
   Plus,
   CalendarCheck,
-  Briefcase,
-  AlertCircle,
-  FileText,
   User,
-  Bell,
-  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -82,7 +77,6 @@ import {
 } from "@/hooks/use-leave";
 import { useMyPayslips } from "@/hooks/use-payroll";
 import { useHolidays } from "@/hooks/use-organization";
-import { useNotifications } from "@/hooks/use-notifications";
 
 interface EmployeeDashboardClientProps {
   userRole: "admin" | "hr" | "manager" | "employee";
@@ -133,7 +127,7 @@ export function EmployeeDashboardClient({
   const [checkOutDialogOpen, setCheckOutDialogOpen] = useState(false);
 
   // Data Queries
-  const { data: me, isLoading: meLoading, refetch: refetchMe } = useMe();
+  const { data: me, refetch: refetchMe } = useMe();
   const {
     data: todayAttendance,
     isLoading: attendanceLoading,
@@ -151,7 +145,6 @@ export function EmployeeDashboardClient({
   const { data: payslips = [], isLoading: payslipsLoading, refetch: refetchPayslips } = useMyPayslips();
   const { data: correctionsData, isLoading: correctionsLoading, refetch: refetchCorrections } = useAttendanceCorrections();
   const { data: holidays = [], isLoading: holidaysLoading, refetch: refetchHolidays } = useHolidays();
-  const { data: notifications = [] } = useNotifications();
 
   // Mutations
   const checkInMutation = useCheckIn();

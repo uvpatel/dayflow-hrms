@@ -584,6 +584,69 @@ export function ManagerDashboardClient({
                 </Table>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold">
+                  Attendance Correction Requests ({correctionsList.length})
+                </CardTitle>
+                <CardDescription>
+                  Recent punch adjustment requests logged by team members.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User / Identifier</TableHead>
+                      <TableHead>Correction Date</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Logged At</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {correctionsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                          Loading corrections...
+                        </TableCell>
+                      </TableRow>
+                    ) : correctionsList.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                          No attendance corrections recorded.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      correctionsList.map((corr) => (
+                        <TableRow key={corr.id}>
+                          <TableCell className="font-mono text-xs">
+                            {corr.userId}
+                          </TableCell>
+                          <TableCell className="text-xs tabular-nums">
+                            {corr.correctionDate
+                              ? new Date(corr.correctionDate).toLocaleDateString()
+                              : "-"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground max-w-sm truncate">
+                            {corr.reason || "Manual punch adjustment"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground tabular-nums">
+                            {new Date(corr.createdAt).toLocaleString()}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary" className="text-xs">
+                              Logged
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* TAB 3: TEAM TIME OFF SCHEDULE */}

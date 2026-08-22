@@ -103,6 +103,7 @@ export class ApprovalsService {
       status: "pending",
     });
     await logActivity({
+      organizationId: authContext.organizationId!,
       action: "APPROVAL_CREATED",
       description: `Approval request #${created.id} submitted for requestor #${data.requestorId}`,
     });
@@ -137,6 +138,7 @@ export class ApprovalsService {
         : `Your approval request #${id} has been rejected. Reason: ${reason!.trim()}`,
     });
     await logActivity({
+      organizationId: authContext.organizationId!,
       action: status === "approved" ? "APPROVAL_APPROVED" : "APPROVAL_REJECTED",
       description: `Approval request #${id} ${status}`,
     });

@@ -6,10 +6,10 @@ Dayflow uses Bun's test runner, TypeScript, ESLint, and the Next.js production c
 
 At the 2026-08-22 documentation checkpoint:
 
-- `bun test` passed **20 tests, 0 failed, 56 assertions** across two files.
+- `bun test` passed **26 tests, 0 failed, 77 assertions** across two files.
 - `tests/permissions.test.ts` contains 12 permission, auth-schema, page-policy, and redirect tests.
-- `tests/business-domain.test.ts` contains 8 attendance, manager-assignment, and leave-rule tests.
-- The latest Drizzle migration was generated at `drizzle/20260822083351_worthless_mister_fear`.
+- `tests/business-domain.test.ts` contains 14 attendance, manager-assignment, leave, and payroll-money tests.
+- This pass generated `drizzle/20260822083351_worthless_mister_fear` and the final follow-up `drizzle/20260822092821_mysterious_zemo`; a subsequent `db:generate` reported no additional schema changes.
 - No migration, seed, database-backed route test, concurrent workflow test, or rollback test was executed.
 - Lint, typecheck, and production-build results are separate quality gates and are not implied by the unit-test result.
 
@@ -60,7 +60,8 @@ The current pure unit suite covers:
 - Post-authentication routing for known and unknown roles.
 - Attendance transition and duration rules.
 - Employee-manager self/cycle validation.
-- Leave date, overlap, balance, and decision rules.
+- Leave date, scheduled-workday/holiday duration, overlap, balance, actor scope, and decision rules.
+- Exact-cent payroll parsing/formatting, server-derived net pay, and invalid deduction rejection.
 
 These are pure-function and schema-shape tests. They do not issue HTTP requests or SQL and therefore do not prove route-handler guards, foreign keys, generated migration compatibility, transaction rollback, or concurrent uniqueness.
 

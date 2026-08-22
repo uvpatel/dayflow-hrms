@@ -24,6 +24,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Tabs,
   TabsContent,
@@ -56,6 +66,11 @@ export default function ApprovalsPage() {
   const [activeTab, setActiveTab] = useState("leave");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [searchQuery, setSearchQuery] = useState("");
+  const [rejectionTarget, setRejectionTarget] = useState<{
+    kind: "leave" | "correction";
+    id: number;
+  } | null>(null);
+  const [rejectionComment, setRejectionComment] = useState("");
 
   const { data: leaveData, isLoading: leaveLoading, refetch: refetchLeaves } = useLeaveRequests({ limit: 100 });
   const { data: correctionsData, isLoading: corrLoading, refetch: refetchCorrections } = useAttendanceCorrections({ limit: 100 });
@@ -95,31 +110,60 @@ export default function ApprovalsPage() {
     }
   };
 
-  const handleRejectLeave = async (id: number) => {
+  const openRejectionDialog = (
+    kind: "leave" | "correction",
+    id: number,
+  ) => {
+    setRejectionComment("");
+    setRejectionTarget({ kind, id });
+  };
+
+  const closeRejectionDialog = () => {
+    setRejectionTarget(null);
+    setRejectionComment("");
+  };
+
+  const handleSubmitRejection = async () => {
+    if (!rejectionTarget) return;
+    const comment = rejectionComment.trim();
+    if (comment.length < 3) {
+      toast.error("Add a rejection comment of at least 3 characters");
+      return;
+    }
+
     try {
-      await rejectLeaveMutation.mutateAsync({ id, reason: "Schedule conflict with key milestone" });
-      toast.success(`Leave request #${id} rejected`);
+      if (rejectionTarget.kind === "leave") {
+        await rejectLeaveMutation.mutateAsync({
+          id: rejectionTarget.id,
+          reason: comment,
+        });
+        toast.success(`Leave request #${rejectionTarget.id} rejected`);
+      } else {
+        await decideCorrectionMutation.mutateAsync({
+          id: rejectionTarget.id,
+          decision: "rejected",
+          comment,
+        });
+        toast.success(
+          `Attendance correction #${rejectionTarget.id} rejected`,
+        );
+      }
+      closeRejectionDialog();
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to reject request";
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to reject request";
       toast.error(errorMsg);
     }
   };
 
   const handleCorrectionDecision = async (
     id: number,
-    decision: "approved" | "rejected",
+    decision: "approved",
   ) => {
-    const comment =
-      decision === "rejected"
-        ? window.prompt("Add a rejection comment for the employee:")
-        : undefined;
-    if (decision === "rejected" && !comment?.trim()) return;
-
     try {
       await decideCorrectionMutation.mutateAsync({
         id,
         decision,
-        comment: comment?.trim(),
       });
       toast.success(`Attendance correction #${id} ${decision}`);
     } catch (err: unknown) {
@@ -342,7 +386,9 @@ export default function ApprovalsPage() {
                                   size="sm"
                                   variant="outline"
                                   className="h-8 text-destructive hover:bg-destructive/10 border-destructive/30"
-                                  onClick={() => handleRejectLeave(req.id)}
+                                  onClick={() =>
+                                    openRejectionDialog("leave", req.id)
+                                  }
                                   disabled={rejectLeaveMutation.isPending}
                                 >
                                   <XCircle className="size-3.5 mr-1" />
@@ -443,7 +489,7 @@ export default function ApprovalsPage() {
                                 className="h-8 border-destructive/30 text-destructive hover:bg-destructive/10"
                                 disabled={decideCorrectionMutation.isPending}
                                 onClick={() =>
-                                  void handleCorrectionDecision(corr.id, "rejected")
+                                  openRejectionDialog("correction", corr.id)
                                 }
                               >
                                 <XCircle className="mr-1 size-3.5" />
@@ -466,6 +512,63 @@ export default function ApprovalsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={rejectionTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) closeRejectionDialog();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject request</DialogTitle>
+            <DialogDescription>
+              Explain the decision clearly. The employee will receive this
+              comment with the rejection notification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="rejection-comment">Rejection comment</Label>
+            <Textarea
+              id="rejection-comment"
+              value={rejectionComment}
+              onChange={(event) => setRejectionComment(event.target.value)}
+              placeholder="Describe the reason for rejecting this request"
+              minLength={3}
+              maxLength={1_000}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeRejectionDialog}
+              disabled={
+                rejectLeaveMutation.isPending ||
+                decideCorrectionMutation.isPending
+              }
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleSubmitRejection()}
+              disabled={
+                rejectionComment.trim().length < 3 ||
+                rejectLeaveMutation.isPending ||
+                decideCorrectionMutation.isPending
+              }
+            >
+              {rejectLeaveMutation.isPending ||
+              decideCorrectionMutation.isPending
+                ? "Rejecting…"
+                : "Reject request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

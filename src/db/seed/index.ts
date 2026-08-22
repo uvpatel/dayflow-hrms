@@ -141,7 +141,7 @@ async function main() {
     { userId: "usr_mgr_01", email: "manager1@dayflow.dev", name: "Elena Rostova", role: "manager" as const, empNo: "EMP-1004", deptIdx: 0, desigIdx: 0, locIdx: 0 },
     { userId: "usr_mgr_02", email: "manager2@dayflow.dev", name: "David Miller", role: "manager" as const, empNo: "EMP-1005", deptIdx: 1, desigIdx: 4, locIdx: 1 },
     { userId: "usr_mgr_03", email: "manager3@dayflow.dev", name: "Priya Raman", role: "manager" as const, empNo: "EMP-1021", deptIdx: 3, desigIdx: 7, locIdx: 0 },
-    // Employees (15 staff)
+    // Employees (20 staff)
     { userId: "usr_emp_01", email: "emp1@dayflow.dev", name: "James Wilson", role: "employee" as const, empNo: "EMP-1006", deptIdx: 0, desigIdx: 1, locIdx: 0 },
     { userId: "usr_emp_02", email: "emp2@dayflow.dev", name: "Olivia Martinez", role: "employee" as const, empNo: "EMP-1007", deptIdx: 0, desigIdx: 2, locIdx: 0 },
     { userId: "usr_emp_03", email: "emp3@dayflow.dev", name: "Liam Anderson", role: "employee" as const, empNo: "EMP-1008", deptIdx: 0, desigIdx: 1, locIdx: 1 },
@@ -176,11 +176,19 @@ async function main() {
           id: u.userId,
           name: u.name,
           email: u.email,
+          employeeNumber: u.empNo,
           emailVerified: true,
           role: u.role,
         })
         .returning();
 
+    }
+    if (authUser.employeeNumber !== u.empNo) {
+      [authUser] = await db
+        .update(user)
+        .set({ employeeNumber: u.empNo, updatedAt: new Date() })
+        .where(eq(user.id, authUser.id))
+        .returning();
     }
 
     const [credentialAccount] = await db
@@ -454,24 +462,31 @@ async function main() {
 
   // 11. Salary Structures & Payroll
   console.log("💰 Seeding salary structures and payroll periods...");
-  let [struct] = await db.select().from(salaryStructures).limit(1);
+  let [struct] = await db.select().from(salaryStructures).where(sql`
+    ${salaryStructures.organizationId} = ${org.id}
+    AND ${salaryStructures.name} = ${"Standard Full-Time Engineering"}
+  `).limit(1);
   if (!struct) {
     [struct] = await db
       .insert(salaryStructures)
       .values({
+        organizationId: org.id,
         name: "Standard Full-Time Engineering",
         description: "Base + HRA + Medical + Performance Allowance",
       })
       .returning();
 
     await db.insert(salaryComponents).values([
-      { name: "Base Salary", description: "Fixed standard compensation" },
-      { name: "Housing Allowance (HRA)", description: "Monthly housing assistance" },
-      { name: "Medical Insurance", description: "Comprehensive health coverage deduction" },
+      { organizationId: org.id, name: "Base Salary", description: "Fixed standard compensation" },
+      { organizationId: org.id, name: "Housing Allowance (HRA)", description: "Monthly housing assistance" },
+      { organizationId: org.id, name: "Medical Insurance", description: "Comprehensive health coverage deduction" },
     ]);
   }
 
-  let [period] = await db.select().from(payrollPeriods).where(eq(payrollPeriods.name, "August 2026")).limit(1);
+  let [period] = await db.select().from(payrollPeriods).where(sql`
+    ${payrollPeriods.organizationId} = ${org.id}
+    AND ${payrollPeriods.name} = ${"August 2026"}
+  `).limit(1);
   if (!period) {
     [period] = await db
       .insert(payrollPeriods)
@@ -527,10 +542,20 @@ async function main() {
   }
 
   for (const activity of [
-    { action: "SYSTEM_INITIALIZED", description: "Dayflow HRMS seed data populated successfully." },
-    { action: "ORGANIZATION_CONFIGURED", description: "Configured Dayflow Technologies organization profile." },
+    {
+      organizationId: org.id,
+      action: "SYSTEM_INITIALIZED",
+      description: "Dayflow HRMS seed data populated successfully.",
+    },
+    {
+      organizationId: org.id,
+      action: "ORGANIZATION_CONFIGURED",
+      description: "Configured Dayflow Technologies organization profile.",
+    },
   ]) {
     const [existingActivity] = await db.select().from(activityLogs).where(sql`
+      ${activityLogs.organizationId} = ${activity.organizationId}
+      AND
       ${activityLogs.action} = ${activity.action}
       AND ${activityLogs.description} = ${activity.description}
     `).limit(1);

@@ -9,17 +9,22 @@ import {
   buildPaginationMeta,
   validateBody,
 } from "@/lib/api";
-import { getAuthContext, requirePermission } from "@/lib/auth/session";
+import {
+  getAuthContext,
+  requireOrganization,
+  requirePermission,
+} from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const { searchParams } = new URL(request.url);
     const { page, limit, offset } = parsePagination(searchParams, 50);
 
-    const items = await payrollService.listStructures(limit, offset);
+    const items = await payrollService.listStructures(organizationId, limit, offset);
     const meta = buildPaginationMeta(page, limit, items.length);
 
     return paginatedResponse(items, meta, "Salary structures fetched successfully");
@@ -32,9 +37,10 @@ export async function POST(request: NextRequest) {
   try {
     const authContext = await getAuthContext(request);
     requirePermission(authContext, "payroll:manage");
+    const organizationId = requireOrganization(authContext);
 
     const data = await validateBody(request, createSalaryStructureSchema);
-    const created = await payrollService.createStructure(data);
+    const created = await payrollService.createStructure(organizationId, data);
 
     return createdResponse(created, "Salary structure created successfully");
   } catch (error) {

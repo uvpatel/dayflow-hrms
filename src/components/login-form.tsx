@@ -314,13 +314,13 @@ export function LoginForm({
       </Card>
       <FieldDescription className="px-6 text-center">
         By clicking continue, you agree to our{" "}
-        <a href="#" className="underline underline-offset-4">
+        <Link href="/terms" className="underline underline-offset-4">
           Terms of Service
-        </a>{" "}
+        </Link>{" "}
         and{" "}
-        <a href="#" className="underline underline-offset-4">
+        <Link href="/privacy" className="underline underline-offset-4">
           Privacy Policy
-        </a>
+        </Link>
         .
       </FieldDescription>
     </div>

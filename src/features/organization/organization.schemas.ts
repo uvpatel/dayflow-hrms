@@ -6,7 +6,10 @@ export const createOrganizationSchema = z.object({
   description: z.string().optional(),
 }).strict();
 
-export const updateOrganizationSchema = createOrganizationSchema.partial();
+export const updateOrganizationSchema = z.object({
+  name: z.string().min(2, "Organization name must be at least 2 characters").optional(),
+  description: z.string().nullable().optional(),
+}).strict();
 
 // Department
 export const createDepartmentSchema = z.object({

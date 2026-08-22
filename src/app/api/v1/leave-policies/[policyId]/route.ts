@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:read:self");
 
     const { policyId } = await validateParams(params, policyIdParamSchema);
-    const item = await timeOffService.getLeavePolicy(policyId);
+    const item = await timeOffService.getLeavePolicy(authContext, policyId);
 
     return successResponse(item, undefined, `Leave policy ${policyId} fetched successfully`);
   } catch (error) {
@@ -44,7 +44,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
     const { policyId } = await validateParams(params, policyIdParamSchema);
     const data = await validateBody(request, updateLeavePolicySchema);
-    const updated = await timeOffService.updateLeavePolicy(policyId, data);
+    const updated = await timeOffService.updateLeavePolicy(
+      authContext,
+      policyId,
+      data,
+    );
 
     return successResponse(updated, undefined, `Leave policy ${policyId} updated successfully`);
   } catch (error) {
@@ -58,7 +62,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     requirePermission(authContext, "leave:manage");
 
     const { policyId } = await validateParams(params, policyIdParamSchema);
-    const deleted = await timeOffService.deleteLeavePolicy(policyId);
+    const deleted = await timeOffService.deleteLeavePolicy(authContext, policyId);
 
     return successResponse(deleted, undefined, `Leave policy ${policyId} deleted successfully`);
   } catch (error) {

@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -108,6 +114,17 @@ function getAttendanceState(record: {
   return record.checkOutTime ? "checked_out" : "checked_in";
 }
 
+const subscribeToClientClock = () => () => {};
+const getServerDateLabel = () => "";
+
+function getClientDateLabel() {
+  return new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+}
+
 function useLiveDuration(
   start?: Date | string | null,
   end?: Date | string | null
@@ -191,6 +208,11 @@ function EmptyPanel({ children }: { children: ReactNode }) {
 }
 
 export default function DashboardPage() {
+  const todayLabel = useSyncExternalStore(
+    subscribeToClientClock,
+    getClientDateLabel,
+    getServerDateLabel,
+  );
   const meQuery = useMe();
   const employeeId = meQuery.data?.employee?.id;
   const role = normalizeRole(
@@ -312,12 +334,8 @@ export default function DashboardPage() {
             Your workday, time off, payroll, and team signals are aligned here.
           </p>
         </div>
-        <p className="text-sm tabular-nums text-muted-foreground" suppressHydrationWarning>
-          {new Date().toLocaleDateString(undefined, {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          })}
+        <p className="min-h-5 text-sm tabular-nums text-muted-foreground">
+          {todayLabel}
         </p>
       </section>
 

@@ -11,6 +11,7 @@ import { z } from "zod";
 import { createEmployeeSchema, updateEmployeeSchema } from "./employee.schemas";
 import { validateManagerAssignment } from "./employee.domain";
 import type { NewEmployee } from "@/db/schema/employees";
+import { organizationRepository } from "@/features/organization/organization.repository";
 
 export interface EmployeeListFilters {
   departmentId?: number;
@@ -81,7 +82,11 @@ export class EmployeeService {
 
   async assertCanReadEmployee(authContext: AuthContext, id: number) {
     const employee = await employeeRepository.findEmployeeById(id);
-    if (!employee || employee.organizationId !== authContext.organizationId) {
+    if (
+      !employee ||
+      employee.organizationId == null ||
+      employee.organizationId !== authContext.organizationId
+    ) {
       throw new NotFoundError(`Employee with ID ${id} not found`, "EMPLOYEE_NOT_FOUND");
     }
 
@@ -138,13 +143,19 @@ export class EmployeeService {
     }
 
     const employee = await employeeRepository.findEmployeeById(employeeId);
-    if (!employee || employee.organizationId !== authContext.organizationId) {
+    if (
+      !employee ||
+      employee.organizationId == null ||
+      employee.organizationId !== authContext.organizationId
+    ) {
       throw new NotFoundError(`Employee with ID ${employeeId} not found`, "EMPLOYEE_NOT_FOUND");
     }
+    const organizationId = employee.organizationId;
 
     if (managerId === null) {
       const updated = await employeeRepository.updateEmployee(employeeId, { managerId: null });
       await logActivity({
+        organizationId,
         action: "EMPLOYEE_MANAGER_REMOVED",
         description: `Removed reporting manager from employee #${employeeId}`,
       });
@@ -167,6 +178,7 @@ export class EmployeeService {
 
     const updated = await employeeRepository.updateEmployee(employeeId, { managerId });
     await logActivity({
+      organizationId,
       action: "EMPLOYEE_MANAGER_ASSIGNED",
       description: `Assigned manager #${managerId} to employee #${employeeId}`,
     });
@@ -175,7 +187,7 @@ export class EmployeeService {
 
   async createEmployee(
     data: z.infer<typeof createEmployeeSchema>,
-    organizationId?: number,
+    organizationId: number,
   ) {
     // Check if email is already taken
     const existing = await employeeRepository.findEmployeeByEmail(data.email);
@@ -187,7 +199,7 @@ export class EmployeeService {
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email,
-      organizationId: organizationId ?? null,
+      organizationId,
       phoneNumber: data.phoneNumber ?? null,
       employeeNumber: data.employeeNumber ?? null,
       departmentId: data.departmentId ?? null,
@@ -231,6 +243,7 @@ export class EmployeeService {
     }
 
     await logActivity({
+      organizationId,
       action: "EMPLOYEE_CREATED",
       description: `Created employee ${employee.firstName} ${employee.lastName} (${employee.email})`,
     });
@@ -251,6 +264,8 @@ export class EmployeeService {
     if (!authContext.organizationId) {
       throw new BusinessRuleError("An organization is required to create an employee");
     }
+
+    await this.assertOrganizationReferences(authContext.organizationId, data);
 
     if (data.managerId) {
       const manager = await employeeRepository.findEmployeeById(data.managerId);
@@ -293,10 +308,13 @@ export class EmployeeService {
 
     const updated = await employeeRepository.updateEmployee(id, data);
 
-    await logActivity({
-      action: "EMPLOYEE_UPDATED",
-      description: `Updated employee profile for ID ${id}`,
-    });
+    if (existing.organizationId != null) {
+      await logActivity({
+        organizationId: existing.organizationId,
+        action: "EMPLOYEE_UPDATED",
+        description: `Updated employee profile for ID ${id}`,
+      });
+    }
 
     return updated!;
   }
@@ -323,6 +341,19 @@ export class EmployeeService {
       throw new AuthorizationError("Only administrators can change employee roles");
     }
 
+    const references = await this.assertOrganizationReferences(
+      authContext.organizationId,
+      data,
+    );
+    if (
+      data.workScheduleId != null &&
+      references.workSchedule?.employeeId !== id
+    ) {
+      throw new BusinessRuleError(
+        "A work schedule can only be assigned to the employee it was created for",
+      );
+    }
+
     const { managerId, ...employeeData } = data;
     let updated = existing;
     if (Object.keys(employeeData).length > 0) {
@@ -334,6 +365,58 @@ export class EmployeeService {
     return updated;
   }
 
+  private async assertOrganizationReferences(
+    organizationId: number,
+    data: {
+      departmentId?: number | null;
+      designationId?: number | null;
+      locationId?: number | null;
+      workScheduleId?: number | null;
+    },
+  ) {
+    const [department, designation, location, workSchedule] = await Promise.all([
+      data.departmentId == null
+        ? null
+        : organizationRepository.findDepartmentById(organizationId, data.departmentId),
+      data.designationId == null
+        ? null
+        : organizationRepository.findDesignationById(organizationId, data.designationId),
+      data.locationId == null
+        ? null
+        : organizationRepository.findLocationById(organizationId, data.locationId),
+      data.workScheduleId == null
+        ? null
+        : organizationRepository.findWorkScheduleById(organizationId, data.workScheduleId),
+    ]);
+
+    if (data.departmentId != null && !department) {
+      throw new NotFoundError(
+        `Department with ID ${data.departmentId} not found`,
+        "DEPARTMENT_NOT_FOUND",
+      );
+    }
+    if (data.designationId != null && !designation) {
+      throw new NotFoundError(
+        `Designation with ID ${data.designationId} not found`,
+        "DESIGNATION_NOT_FOUND",
+      );
+    }
+    if (data.locationId != null && !location) {
+      throw new NotFoundError(
+        `Location with ID ${data.locationId} not found`,
+        "LOCATION_NOT_FOUND",
+      );
+    }
+    if (data.workScheduleId != null && !workSchedule) {
+      throw new NotFoundError(
+        `Work schedule with ID ${data.workScheduleId} not found`,
+        "SCHEDULE_NOT_FOUND",
+      );
+    }
+
+    return { department, designation, location, workSchedule };
+  }
+
   async deleteEmployee(id: number) {
     const existing = await employeeRepository.findEmployeeById(id);
     if (!existing) {
@@ -342,10 +425,13 @@ export class EmployeeService {
 
     const deleted = await employeeRepository.deleteEmployee(id);
 
-    await logActivity({
-      action: "EMPLOYEE_DELETED",
-      description: `Deleted employee ${existing.firstName} ${existing.lastName} (#${id})`,
-    });
+    if (existing.organizationId != null) {
+      await logActivity({
+        organizationId: existing.organizationId,
+        action: "EMPLOYEE_DELETED",
+        description: `Deleted employee ${existing.firstName} ${existing.lastName} (#${id})`,
+      });
+    }
 
     return deleted!;
   }

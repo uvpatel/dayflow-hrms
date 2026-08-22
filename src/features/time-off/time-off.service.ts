@@ -22,46 +22,65 @@ import { employeeRepository } from "@/features/employees/employee.repository";
 import {
   assertPendingCancellation,
   assertRejectComment,
-  calculateRequestedDays,
+  calculateWorkingLeaveDays,
   canDecideLeaveRequest,
   canReadLeaveRequest,
 } from "./time-off.domain";
 
 export class TimeOffService {
   // Leave Types
-  async listLeaveTypes(limit = 50, offset = 0) {
-    return await timeOffRepository.findLeaveTypes(limit, offset);
+  async listLeaveTypes(authContext: AuthContext, limit = 50, offset = 0) {
+    const actor = this.accessActor(authContext);
+    return await timeOffRepository.findLeaveTypes(
+      actor.organizationId,
+      limit,
+      offset,
+    );
   }
 
-  async getLeaveType(id: number) {
-    const item = await timeOffRepository.findLeaveTypeById(id);
+  async getLeaveType(authContext: AuthContext, id: number) {
+    const actor = this.accessActor(authContext);
+    const item = await timeOffRepository.findLeaveTypeById(actor.organizationId, id);
     if (!item) throw new NotFoundError(`Leave type with ID ${id} not found`);
     return item;
   }
 
-  async createLeaveType(data: z.infer<typeof createLeaveTypeSchema>) {
-    const created = await timeOffRepository.createLeaveType(data);
+  async createLeaveType(authContext: AuthContext, data: z.infer<typeof createLeaveTypeSchema>) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const created = await timeOffRepository.createLeaveType({
+      ...data,
+      organizationId: actor.organizationId,
+    });
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_TYPE_CREATED",
       description: `Created leave type ${created.name}`,
     });
     return created;
   }
 
-  async updateLeaveType(id: number, data: z.infer<typeof updateLeaveTypeSchema>) {
-    await this.getLeaveType(id);
-    const updated = await timeOffRepository.updateLeaveType(id, data);
+  async updateLeaveType(authContext: AuthContext, id: number, data: z.infer<typeof updateLeaveTypeSchema>) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const updated = await timeOffRepository.updateLeaveType(
+      actor.organizationId,
+      id,
+      data,
+    );
+    if (!updated) throw new NotFoundError(`Leave type with ID ${id} not found`);
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_TYPE_UPDATED",
       description: `Updated leave type #${id}`,
     });
     return updated!;
   }
 
-  async deleteLeaveType(id: number) {
-    await this.getLeaveType(id);
-    const deleted = await timeOffRepository.deleteLeaveType(id);
+  async deleteLeaveType(authContext: AuthContext, id: number) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const deleted = await timeOffRepository.deleteLeaveType(actor.organizationId, id);
+    if (!deleted) throw new NotFoundError(`Leave type with ID ${id} not found`);
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_TYPE_DELETED",
       description: `Deleted leave type #${id}`,
     });
@@ -69,39 +88,58 @@ export class TimeOffService {
   }
 
   // Leave Policies
-  async listLeavePolicies(limit = 50, offset = 0) {
-    return await timeOffRepository.findLeavePolicies(limit, offset);
+  async listLeavePolicies(authContext: AuthContext, limit = 50, offset = 0) {
+    const actor = this.accessActor(authContext);
+    return await timeOffRepository.findLeavePolicies(
+      actor.organizationId,
+      limit,
+      offset,
+    );
   }
 
-  async getLeavePolicy(id: number) {
-    const item = await timeOffRepository.findLeavePolicyById(id);
+  async getLeavePolicy(authContext: AuthContext, id: number) {
+    const actor = this.accessActor(authContext);
+    const item = await timeOffRepository.findLeavePolicyById(actor.organizationId, id);
     if (!item) throw new NotFoundError(`Leave policy with ID ${id} not found`);
     return item;
   }
 
-  async createLeavePolicy(data: z.infer<typeof createLeavePolicySchema>) {
-    const created = await timeOffRepository.createLeavePolicy(data);
+  async createLeavePolicy(authContext: AuthContext, data: z.infer<typeof createLeavePolicySchema>) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const created = await timeOffRepository.createLeavePolicy({
+      ...data,
+      organizationId: actor.organizationId,
+    });
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_POLICY_CREATED",
       description: `Created leave policy ${created.name}`,
     });
     return created;
   }
 
-  async updateLeavePolicy(id: number, data: z.infer<typeof updateLeavePolicySchema>) {
-    await this.getLeavePolicy(id);
-    const updated = await timeOffRepository.updateLeavePolicy(id, data);
+  async updateLeavePolicy(authContext: AuthContext, id: number, data: z.infer<typeof updateLeavePolicySchema>) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const updated = await timeOffRepository.updateLeavePolicy(
+      actor.organizationId,
+      id,
+      data,
+    );
+    if (!updated) throw new NotFoundError(`Leave policy with ID ${id} not found`);
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_POLICY_UPDATED",
       description: `Updated leave policy #${id}`,
     });
     return updated!;
   }
 
-  async deleteLeavePolicy(id: number) {
-    await this.getLeavePolicy(id);
-    const deleted = await timeOffRepository.deleteLeavePolicy(id);
+  async deleteLeavePolicy(authContext: AuthContext, id: number) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const deleted = await timeOffRepository.deleteLeavePolicy(actor.organizationId, id);
+    if (!deleted) throw new NotFoundError(`Leave policy with ID ${id} not found`);
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_POLICY_DELETED",
       description: `Deleted leave policy #${id}`,
     });
@@ -109,46 +147,94 @@ export class TimeOffService {
   }
 
   // Allocations
-  async listAllocations(limit = 50, offset = 0, employeeId?: number) {
-    return await timeOffRepository.findAllocations(limit, offset, employeeId);
+  async listAllocationsForActor(
+    authContext: AuthContext,
+    limit = 50,
+    offset = 0,
+    employeeId?: number,
+  ) {
+    const actor = this.accessActor(authContext);
+    const employeeIds = await this.readableEmployeeIds(authContext, employeeId);
+    return await timeOffRepository.findAllocations(
+      actor.organizationId,
+      limit,
+      offset,
+      employeeIds,
+    );
   }
 
-  async getAllocation(id: number) {
-    const item = await timeOffRepository.findAllocationById(id);
+  async getAllocationForActor(authContext: AuthContext, id: number) {
+    const actor = this.accessActor(authContext);
+    const item = await timeOffRepository.findAllocationById(actor.organizationId, id);
     if (!item) throw new NotFoundError(`Leave allocation with ID ${id} not found`);
+    const subject = await this.getRequestSubject(item.employeeId);
+    if (!canReadLeaveRequest(actor, subject)) {
+      throw new AuthorizationError(
+        "You can only view your own or an assigned direct report's leave allocation",
+      );
+    }
     return item;
   }
 
-  async createAllocation(data: z.infer<typeof createLeaveAllocationSchema>) {
+  async createAllocation(authContext: AuthContext, data: z.infer<typeof createLeaveAllocationSchema>) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const subject = await this.getRequestSubject(data.employeeId);
+    if (subject.organizationId !== actor.organizationId) {
+      throw new AuthorizationError("Employee is outside your organization");
+    }
+    const leaveType = await timeOffRepository.findLeaveTypeByName(
+      data.leaveType,
+      actor.organizationId,
+    );
+    if (!leaveType?.active) {
+      throw new BusinessRuleError("The selected leave type is not available");
+    }
+    if (data.usedDays > data.allocatedDays) {
+      throw new BusinessRuleError("Used leave cannot exceed allocated leave");
+    }
     const created = await timeOffRepository.createAllocation({
       ...data,
       allocatedDays: data.allocatedDays.toFixed(2),
       usedDays: data.usedDays.toFixed(2),
     });
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_ALLOCATION_CREATED",
       description: `Allocated ${created.allocatedDays} days of ${created.leaveType} to employee #${created.employeeId}`,
     });
     return created;
   }
 
-  async updateAllocation(id: number, data: z.infer<typeof updateLeaveAllocationSchema>) {
-    await this.getAllocation(id);
-    const updated = await timeOffRepository.updateAllocation(id, {
+  async updateAllocation(authContext: AuthContext, id: number, data: z.infer<typeof updateLeaveAllocationSchema>) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const allocation = await timeOffRepository.findAllocationById(
+      actor.organizationId,
+      id,
+    );
+    if (!allocation) throw new NotFoundError(`Leave allocation with ID ${id} not found`);
+    const allocatedDays = data.allocatedDays ?? Number(allocation.allocatedDays);
+    const usedDays = data.usedDays ?? Number(allocation.usedDays);
+    if (usedDays > allocatedDays) {
+      throw new BusinessRuleError("Used leave cannot exceed allocated leave");
+    }
+    const updated = await timeOffRepository.updateAllocation(actor.organizationId, id, {
       ...(data.allocatedDays !== undefined && { allocatedDays: data.allocatedDays.toFixed(2) }),
       ...(data.usedDays !== undefined && { usedDays: data.usedDays.toFixed(2) }),
     });
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_ALLOCATION_UPDATED",
       description: `Updated leave allocation #${id}`,
     });
     return updated!;
   }
 
-  async deleteAllocation(id: number) {
-    await this.getAllocation(id);
-    const deleted = await timeOffRepository.deleteAllocation(id);
+  async deleteAllocation(authContext: AuthContext, id: number) {
+    const actor = this.requireLeaveAdministrator(authContext);
+    const deleted = await timeOffRepository.deleteAllocation(actor.organizationId, id);
+    if (!deleted) throw new NotFoundError(`Leave allocation with ID ${id} not found`);
     await logActivity({
+      organizationId: actor.organizationId,
       action: "LEAVE_ALLOCATION_DELETED",
       description: `Deleted leave allocation #${id}`,
     });
@@ -184,13 +270,121 @@ export class TimeOffService {
     return subject;
   }
 
-  private accessActor(authContext: AuthContext) {
+  private async requireActiveLeaveType(name: string, organizationId: number) {
+    const leaveType = await timeOffRepository.findLeaveTypeByName(
+      name,
+      organizationId,
+    );
+    if (!leaveType?.active) {
+      throw new BusinessRuleError("The selected leave type is not available");
+    }
+    return leaveType;
+  }
+
+  private async assertLeaveTypeStillActive(
+    organizationId: number,
+    leaveTypeId: number,
+    expectedName: string,
+  ) {
+    const current = await timeOffRepository.findLeaveTypeById(
+      organizationId,
+      leaveTypeId,
+    );
+    if (!current?.active || current.name !== expectedName) {
+      throw new BusinessRuleError(
+        "The selected leave type changed or became inactive while the operation was in progress",
+      );
+    }
+  }
+
+  private accessActor(authContext: AuthContext): {
+    role: AuthContext["role"];
+    employeeId: number;
+    organizationId: number;
+  } {
     const employee = this.requireActorEmployee(authContext);
+    const organizationId = authContext.organizationId;
+    if (organizationId == null) {
+      throw new BusinessRuleError(
+        "A linked employee and organization are required for leave operations",
+      );
+    }
     return {
       role: authContext.role,
       employeeId: employee.id,
-      organizationId: authContext.organizationId,
+      organizationId,
     };
+  }
+
+  private requireLeaveAdministrator(authContext: AuthContext) {
+    const actor = this.accessActor(authContext);
+    if (actor.role !== "admin" && actor.role !== "hr") {
+      throw new AuthorizationError("Only HR or administrators can manage leave settings");
+    }
+    return actor;
+  }
+
+  private async readableEmployeeIds(
+    authContext: AuthContext,
+    requestedEmployeeId?: number,
+  ): Promise<number[] | undefined> {
+    const actor = this.accessActor(authContext);
+    if (actor.role === "admin" || actor.role === "hr") {
+      if (!requestedEmployeeId) return undefined;
+      const subject = await this.getRequestSubject(requestedEmployeeId);
+      if (subject.organizationId !== actor.organizationId) {
+        throw new AuthorizationError("Employee is outside your organization");
+      }
+      return [requestedEmployeeId];
+    }
+
+    if (actor.role === "manager") {
+      const reports = await employeeRepository.findDirectReports(
+        actor.employeeId,
+        actor.organizationId,
+      );
+      const allowedIds = [actor.employeeId, ...reports.map((report) => report.id)];
+      if (requestedEmployeeId && !allowedIds.includes(requestedEmployeeId)) {
+        throw new AuthorizationError("Managers can only view their direct reports");
+      }
+      return requestedEmployeeId ? [requestedEmployeeId] : allowedIds;
+    }
+
+    if (requestedEmployeeId && requestedEmployeeId !== actor.employeeId) {
+      throw new AuthorizationError("Employees can only view their own leave data");
+    }
+    return [actor.employeeId];
+  }
+
+  private async calculateLeaveDays(
+    subject: Awaited<ReturnType<typeof employeeRepository.findEmployeeById>> & {},
+    organizationId: number,
+    startDate: Date,
+    endDate: Date,
+    unit: "full_day" | "half_day",
+  ) {
+    const [schedule, holidayDateKeys] = await Promise.all([
+      timeOffRepository.findEmployeeSchedule(
+        subject.id,
+        subject.workScheduleId,
+      ),
+      timeOffRepository.findHolidayDateKeys(
+        organizationId,
+        startDate,
+        endDate,
+      ),
+    ]);
+    const weekdays = (schedule?.weekdays ?? "1,2,3,4,5")
+      .split(",")
+      .map((weekday) => Number(weekday.trim()))
+      .filter((weekday) => Number.isInteger(weekday) && weekday >= 1 && weekday <= 7);
+    return calculateWorkingLeaveDays(
+      startDate,
+      endDate,
+      unit,
+      weekdays,
+      new Set(holidayDateKeys),
+    );
   }
 
   async listRequestsForActor(
@@ -201,29 +395,10 @@ export class TimeOffService {
     status?: string,
   ) {
     const actor = this.accessActor(authContext);
-    let employeeIds: number[] | undefined;
-
-    if (actor.role === "admin" || actor.role === "hr") {
-      if (requestedEmployeeId) {
-        const subject = await this.getRequestSubject(requestedEmployeeId);
-        if (subject.organizationId !== actor.organizationId) {
-          throw new AuthorizationError("Employee is outside your organization");
-        }
-        employeeIds = [requestedEmployeeId];
-      }
-    } else if (actor.role === "manager") {
-      const reports = await employeeRepository.findDirectReports(
-        actor.employeeId,
-        actor.organizationId,
-      );
-      const allowedIds = [actor.employeeId, ...reports.map((report) => report.id)];
-      if (requestedEmployeeId && !allowedIds.includes(requestedEmployeeId)) {
-        throw new AuthorizationError("Managers can only view their direct reports");
-      }
-      employeeIds = requestedEmployeeId ? [requestedEmployeeId] : allowedIds;
-    } else {
-      employeeIds = [actor.employeeId];
-    }
+    const employeeIds = await this.readableEmployeeIds(
+      authContext,
+      requestedEmployeeId,
+    );
 
     const scope = {
       organizationId: actor.organizationId,
@@ -270,25 +445,29 @@ export class TimeOffService {
 
     let requestedDays: number;
     try {
-      requestedDays = calculateRequestedDays(data.startDate, data.endDate, data.unit);
+      requestedDays = await this.calculateLeaveDays(
+        subject,
+        actor.organizationId,
+        data.startDate,
+        data.endDate,
+        data.unit,
+      );
     } catch (error) {
       throw new BusinessRuleError(
         error instanceof Error ? error.message : "Invalid leave dates",
       );
     }
 
-    const leaveType = await timeOffRepository.findLeaveTypeByName(
+    const leaveType = await this.requireActiveLeaveType(
       data.leaveType,
       actor.organizationId,
     );
-    if (!leaveType || !leaveType.active) {
-      throw new BusinessRuleError("The selected leave type is not available");
-    }
 
     const created = await timeOffRepository.createRequestAtomically({
+      leaveTypeId: leaveType.id,
       employeeId,
       organizationId: actor.organizationId,
-      leaveType: data.leaveType,
+      leaveType: leaveType.name,
       startDate: data.startDate,
       endDate: data.endDate,
       days: requestedDays.toFixed(2),
@@ -296,6 +475,12 @@ export class TimeOffService {
       reason: data.reason?.trim() || null,
     });
     if (created) return created;
+
+    await this.assertLeaveTypeStillActive(
+      actor.organizationId,
+      leaveType.id,
+      leaveType.name,
+    );
 
     const overlapping = await timeOffRepository.findOverlappingRequests(
       employeeId,
@@ -312,13 +497,13 @@ export class TimeOffService {
     if (leaveType.requiresBalance) {
       const allocation = await timeOffRepository.findAllocationByEmployeeAndType(
         employeeId,
-        data.leaveType,
+        leaveType.name,
       );
       const remaining = allocation
         ? Number(allocation.allocatedDays) - Number(allocation.usedDays)
         : 0;
       throw new BusinessRuleError(
-        `Insufficient leave balance. ${remaining} days remain for ${data.leaveType}.`,
+        `Insufficient leave balance. ${remaining} days remain for ${leaveType.name}.`,
         "INSUFFICIENT_LEAVE_BALANCE",
       );
     }
@@ -350,6 +535,11 @@ export class TimeOffService {
       );
     }
 
+    const leaveType = await this.requireActiveLeaveType(
+      request.leaveType,
+      actor.organizationId,
+    );
+
     let normalizedComment = comment?.trim() || null;
     if (decision === "rejected") {
       try {
@@ -365,7 +555,8 @@ export class TimeOffService {
       requestId: id,
       actorEmployeeId: actor.employeeId,
       actorRole: actor.role,
-      organizationId: actor.organizationId!,
+      organizationId: actor.organizationId,
+      leaveTypeId: leaveType.id,
       decision,
       comment: normalizedComment,
     });
@@ -378,6 +569,12 @@ export class TimeOffService {
         "LEAVE_ALREADY_RESOLVED",
       );
     }
+
+    await this.assertLeaveTypeStillActive(
+      actor.organizationId,
+      leaveType.id,
+      leaveType.name,
+    );
 
     const latestSubject = await this.getRequestSubject(latest.employeeId);
     if (!canDecideLeaveRequest(actor, latestSubject)) {
@@ -455,23 +652,25 @@ export class TimeOffService {
     const unit = data.unit ?? (request.unit as "full_day" | "half_day");
     let days: number;
     try {
-      days = calculateRequestedDays(startDate, endDate, unit);
+      const subject = await this.getRequestSubject(actor.employeeId);
+      days = await this.calculateLeaveDays(
+        subject,
+        actor.organizationId,
+        startDate,
+        endDate,
+        unit,
+      );
     } catch (error) {
       throw new BusinessRuleError(
         error instanceof Error ? error.message : "Invalid leave dates",
       );
     }
 
-    const leaveType = await timeOffRepository.findLeaveTypeByName(
+    const leaveType = await this.requireActiveLeaveType(
       leaveTypeName,
       actor.organizationId,
     );
-    if (!leaveType || !leaveType.active) {
-      throw new BusinessRuleError("The selected leave type is not available");
-    }
-    const requiresBalance =
-      leaveType.requiresBalance && !leaveTypeName.toLowerCase().includes("unpaid");
-    if (requiresBalance) {
+    if (leaveType.requiresBalance) {
       const allocation = await timeOffRepository.findAllocationByEmployeeAndType(
         actor.employeeId,
         leaveTypeName,
@@ -488,10 +687,11 @@ export class TimeOffService {
     }
 
     const updated = await timeOffRepository.updateRequestAtomically({
+      leaveTypeId: leaveType.id,
       requestId: id,
       employeeId: actor.employeeId,
       organizationId: actor.organizationId!,
-      leaveType: leaveTypeName,
+      leaveType: leaveType.name,
       startDate,
       endDate,
       unit,
@@ -508,6 +708,11 @@ export class TimeOffService {
         "LEAVE_ALREADY_RESOLVED",
       );
     }
+    await this.assertLeaveTypeStillActive(
+      actor.organizationId,
+      leaveType.id,
+      leaveType.name,
+    );
     const overlapping = await timeOffRepository.findOverlappingRequests(
       actor.employeeId,
       startDate,

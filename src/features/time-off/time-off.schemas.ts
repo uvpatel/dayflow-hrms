@@ -4,7 +4,9 @@ import { z } from "zod";
 export const createLeaveTypeSchema = z.object({
   name: z.string().min(2, "Leave type name must be at least 2 characters"),
   description: z.string().optional(),
-});
+  requiresBalance: z.boolean().default(true),
+  active: z.boolean().default(true),
+}).strict();
 
 export const updateLeaveTypeSchema = createLeaveTypeSchema.partial();
 
@@ -12,7 +14,7 @@ export const updateLeaveTypeSchema = createLeaveTypeSchema.partial();
 export const createLeavePolicySchema = z.object({
   name: z.string().min(2, "Policy name must be at least 2 characters"),
   description: z.string().optional(),
-});
+}).strict();
 
 export const updateLeavePolicySchema = createLeavePolicySchema.partial();
 
@@ -20,14 +22,14 @@ export const updateLeavePolicySchema = createLeavePolicySchema.partial();
 export const createLeaveAllocationSchema = z.object({
   employeeId: z.number().int().positive("Valid employee ID is required"),
   leaveType: z.string().min(1, "Leave type is required"),
-  allocatedDays: z.number().int().positive("Allocated days must be greater than 0"),
-  usedDays: z.number().int().default(0),
-});
+  allocatedDays: z.number().positive("Allocated days must be greater than 0").multipleOf(0.5),
+  usedDays: z.number().min(0).multipleOf(0.5).default(0),
+}).strict();
 
 export const updateLeaveAllocationSchema = z.object({
-  allocatedDays: z.number().int().positive().optional(),
-  usedDays: z.number().int().min(0).optional(),
-});
+  allocatedDays: z.number().positive().multipleOf(0.5).optional(),
+  usedDays: z.number().min(0).multipleOf(0.5).optional(),
+}).strict();
 
 // Leave Requests
 export const createLeaveRequestSchema = z.object({
