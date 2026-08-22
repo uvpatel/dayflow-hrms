@@ -1,5 +1,5 @@
 export * from "./enums";
-export * from "./accounts";
+export * from "./auth-schema";
 export * from "./activity-logs";
 export * from "./approval-requests";
 export * from "./attendance-corrections";
@@ -23,9 +23,6 @@ export * from "./payslip-items";
 export * from "./payslips";
 export * from "./salary-components";
 export * from "./salary-structures";
-export * from "./sessions";
-export * from "./users";
-export * from "./verifications";
 export * from "./work-schedule-days";
 export * from "./work-schedules";
 export * from "./workdays";

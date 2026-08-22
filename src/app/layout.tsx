@@ -5,10 +5,6 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { ModeToggle } from "@/components/toggler";
-import { dark, neobrutalism } from '@clerk/ui/themes'
-import Link from "next/link";
-
-
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dayflow -HRMS System",
+  title: "Dayflow - HRMS System",
   description: "Dayflow is Human Resource Management System for your company",
 };
 
@@ -36,32 +32,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <TooltipProvider>
-
-        
           <ThemeProvider
             attribute="class"
             defaultTheme="system"
             enableSystem
             disableTransitionOnChange
           >
-           
-        
-          <header className="flex justify-end items-center p-4 gap-4 h-16">
-           
-                <span className="mx-2 text-white " >{today.toLocaleDateString("en-US", {
+            <header className="flex justify-end items-center p-4 gap-4 h-16">
+              <span className="mx-2 text-xs text-muted-foreground hidden sm:inline-block">
+                {today.toLocaleDateString("en-US", {
                   weekday: "long",
                   year: "numeric",
                   month: "long",
                   day: "numeric",
-                })}</span>
-             <ModeToggle />
-              
-      </header>
-          {children}
-      
-        </ThemeProvider>
-        
-         </TooltipProvider>
+                })}
+              </span>
+              <ModeToggle />
+            </header>
+            {children}
+          </ThemeProvider>
+        </TooltipProvider>
       </body>
     </html>
   );
