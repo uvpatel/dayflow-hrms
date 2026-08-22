@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, Eye, EyeOff } from "lucide-react";
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -46,6 +46,8 @@ export function SignupForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGithubLoading, setIsGithubLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -227,24 +229,40 @@ export function SignupForm({
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field>
                     <FieldLabel htmlFor="password">Password</FieldLabel>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (fieldErrors.password) {
-                          setFieldErrors((prev) => ({
-                            ...prev,
-                            password: undefined,
-                          }));
-                        }
-                      }}
-                      disabled={isSubmitting}
-                      aria-invalid={!!fieldErrors.password}
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (fieldErrors.password) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              password: undefined,
+                            }));
+                          }
+                        }}
+                        disabled={isSubmitting}
+                        aria-invalid={!!fieldErrors.password}
+                        className="pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        tabIndex={-1}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-hidden"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="size-4" />
+                        ) : (
+                          <Eye className="size-4" />
+                        )}
+                      </button>
+                    </div>
                     {fieldErrors.password && (
                       <FieldError
                         errors={[{ message: fieldErrors.password }]}
@@ -255,24 +273,40 @@ export function SignupForm({
                     <FieldLabel htmlFor="confirm-password">
                       Confirm Password
                     </FieldLabel>
-                    <Input
-                      id="confirm-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => {
-                        setConfirmPassword(e.target.value);
-                        if (fieldErrors.confirmPassword) {
-                          setFieldErrors((prev) => ({
-                            ...prev,
-                            confirmPassword: undefined,
-                          }));
-                        }
-                      }}
-                      disabled={isSubmitting}
-                      aria-invalid={!!fieldErrors.confirmPassword}
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          if (fieldErrors.confirmPassword) {
+                            setFieldErrors((prev) => ({
+                              ...prev,
+                              confirmPassword: undefined,
+                            }));
+                          }
+                        }}
+                        disabled={isSubmitting}
+                        aria-invalid={!!fieldErrors.confirmPassword}
+                        className="pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        tabIndex={-1}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground focus:outline-hidden"
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="size-4" />
+                        ) : (
+                          <Eye className="size-4" />
+                        )}
+                      </button>
+                    </div>
                     {fieldErrors.confirmPassword && (
                       <FieldError
                         errors={[{ message: fieldErrors.confirmPassword }]}
