@@ -12,23 +12,39 @@ import { z } from "zod";
 const isProduction = process.env.NODE_ENV === "production";
 const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
 
-function getVercelBaseURL(): string | undefined {
-  const host =
+function resolveBaseURL(): string {
+  const explicit =
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL;
+
+  if (explicit?.trim()) {
+    const trimmed = explicit.trim();
+    const url = new URL(
+      trimmed.startsWith("http://") || trimmed.startsWith("https://")
+        ? trimmed
+        : `https://${trimmed}`,
+    );
+    return url.origin;
+  }
+
+  const vercelHost =
     process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
-  if (!host?.trim()) return undefined;
+  if (vercelHost?.trim()) {
+    const trimmed = vercelHost.trim();
+    const url = new URL(
+      trimmed.startsWith("http://") || trimmed.startsWith("https://")
+        ? trimmed
+        : `https://${trimmed}`,
+    );
+    return url.origin;
+  }
 
-  const value = host.trim();
-  const url = new URL(
-    value.startsWith("http://") || value.startsWith("https://")
-      ? value
-      : `https://${value}`,
-  );
-
-  return url.origin;
+  return isProduction ? "" : "http://localhost:3000";
 }
 
-const configuredBaseURL =
-  process.env.BETTER_AUTH_URL || getVercelBaseURL();
+const configuredBaseURL = resolveBaseURL();
 
 if (isProduction && (!authSecret || authSecret.length < 32)) {
   throw new Error(
@@ -142,7 +158,14 @@ export const auth = betterAuth({
       if (source.action !== "create-user") return;
       if (source.method !== "email-password" && source.method !== "oauth") return;
 
-      const email = typeof user.email === "string" ? user.email.toLowerCase() : "";
+      const email = typeof user.email === "string" ? user.email.toLowerCase().trim() : "";
+      if (!email) {
+        return {
+          error: "EMAIL_REQUIRED",
+          errorDescription: "A valid email address is required.",
+        };
+      }
+
       const employeeNumber =
         typeof user.employeeNumber === "string"
           ? user.employeeNumber.trim().toUpperCase()
@@ -167,6 +190,13 @@ export const auth = betterAuth({
         .where(and(...conditions))
         .limit(1);
       if (!eligibleEmployee) {
+        if (source.method === "oauth") {
+          return {
+            error: "NO_MATCHING_EMPLOYEE",
+            errorDescription:
+              `No pre-registered employee profile found for this GitHub account email (${email}). Please contact HR.`,
+          };
+        }
         return {
           error: "EMPLOYEE_ID_MISMATCH",
           errorDescription:
@@ -190,6 +220,11 @@ export const auth = betterAuth({
             clientId: githubClientId,
             clientSecret: githubClientSecret,
             requireEmailVerification: true,
+            mapProfileToUser: (profile) => ({
+              name: profile.name || profile.login || "User",
+              email: profile.email,
+              image: profile.avatar_url,
+            }),
           },
         }
       : {}),
@@ -197,6 +232,10 @@ export const auth = betterAuth({
   account: {
     encryptOAuthTokens: true,
     storeStateStrategy: "database",
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["github"],
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7,
@@ -211,6 +250,7 @@ export const auth = betterAuth({
     customRules: {
       "/sign-in/email": { window: 60, max: 5 },
       "/sign-up/email": { window: 60, max: 3 },
+      "/sign-in/social": { window: 60, max: 10 },
       "/request-password-reset": { window: 60, max: 3 },
       "/send-verification-email": { window: 60, max: 3 },
     },

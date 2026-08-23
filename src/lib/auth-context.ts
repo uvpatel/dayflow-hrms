@@ -82,11 +82,12 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
       .limit(1);
 
     if (eligibleEmployee) {
+      const assignedRole = normalizeRole(eligibleEmployee.role) || "employee";
       const [linked] = await db
         .update(employees)
         .set({
           userId: user.id,
-          role: "employee",
+          role: assignedRole,
           updatedAt: new Date(),
         })
         .where(and(
@@ -95,7 +96,7 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
         ))
         .returning();
       if (linked) {
-        await synchronizeAuthUserRole(user.id, "employee");
+        await synchronizeAuthUserRole(user.id, assignedRole);
         return linked;
       }
     }

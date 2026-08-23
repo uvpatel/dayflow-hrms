@@ -4,6 +4,7 @@ import {
   AuthAccessError,
   getAuthAccessIssue,
 } from "../src/lib/auth/access";
+import { sanitizeCallbackPath } from "../src/lib/auth/redirects";
 
 describe("protected authentication boundary", () => {
   test("requires a valid Better Auth session", () => {
@@ -44,3 +45,19 @@ describe("protected authentication boundary", () => {
     expect(error.message).toContain("linked employee profile");
   });
 });
+
+describe("GitHub OAuth & Better Auth provider integration", () => {
+  test("safe callback sanitizer handles post-OAuth redirect targets", () => {
+    expect(sanitizeCallbackPath("/dashboard")).toBe("/dashboard");
+    expect(sanitizeCallbackPath("/admin")).toBe("/admin");
+    expect(sanitizeCallbackPath("/dashboard/attendance")).toBe(
+      "/dashboard/attendance",
+    );
+    expect(sanitizeCallbackPath("https://malicious.com")).toBe(
+      "/auth/redirect",
+    );
+    expect(sanitizeCallbackPath("//malicious.com")).toBe("/auth/redirect");
+    expect(sanitizeCallbackPath("javascript:alert(1)")).toBe("/auth/redirect");
+  });
+});
+

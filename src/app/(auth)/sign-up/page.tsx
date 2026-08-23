@@ -8,8 +8,40 @@ type SignUpPageProps = {
   searchParams: Promise<{
     callbackURL?: string | string[];
     error?: string | string[];
+    error_description?: string | string[];
   }>;
 };
+
+function formatAuthError(
+  error?: string,
+  errorDescription?: string,
+): string | undefined {
+  if (errorDescription?.trim()) {
+    return errorDescription.trim();
+  }
+  if (!error) return undefined;
+
+  switch (error.toLowerCase()) {
+    case "email_not_verified":
+      return "Your GitHub email address is not verified. Please verify your email on GitHub or contact HR.";
+    case "no_matching_employee":
+    case "employee_id_mismatch":
+      return "No pre-registered employee profile was found for this account. Please contact your HR administrator to issue an employee record before signing up.";
+    case "account_not_linked":
+      return "An account with this email already exists. Please sign in instead.";
+    case "access_denied":
+    case "user_denied":
+      return "GitHub authentication was cancelled.";
+    case "state_not_found":
+    case "invalid_code":
+    case "invalid_callback_request":
+      return "The authentication session expired or was invalid. Please try signing up again.";
+    case "oauth":
+      return "GitHub sign-up could not be completed. Please try again or use email and password.";
+    default:
+      return error.replace(/_/g, " ");
+  }
+}
 
 export default async function SignUpPage({ searchParams }: SignUpPageProps) {
   const params = await searchParams;
@@ -18,6 +50,10 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
     : params.callbackURL;
   const callbackURL = sanitizeCallbackPath(requestedCallback);
   const authError = Array.isArray(params.error) ? params.error[0] : params.error;
+  const errorDescription = Array.isArray(params.error_description)
+    ? params.error_description[0]
+    : params.error_description;
+
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -26,16 +62,14 @@ export default async function SignUpPage({ searchParams }: SignUpPageProps) {
     redirect(callbackURL);
   }
 
+  const initialError = formatAuthError(authError, errorDescription);
+
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
       <div className="w-full max-w-sm md:max-w-4xl">
         <SignupForm
           callbackURL={callbackURL}
-          initialError={
-            authError
-              ? "GitHub sign-up could not be completed. Please try again or use email and password."
-              : undefined
-          }
+          initialError={initialError}
           githubEnabled={Boolean(
             process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET,
           )}

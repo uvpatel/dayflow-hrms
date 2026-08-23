@@ -165,7 +165,7 @@ export function SignupForm({
           safeCallbackURL,
           window.location.origin,
         ),
-        errorCallbackURL: `${window.location.origin}/sign-up?error=oauth`,
+        errorCallbackURL: `${window.location.origin}/sign-up`,
       });
 
       if (res?.error) {

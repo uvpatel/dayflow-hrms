@@ -134,7 +134,7 @@ export function LoginForm({
           safeCallbackURL,
           window.location.origin,
         ),
-        errorCallbackURL: `${window.location.origin}/sign-in?error=oauth`,
+        errorCallbackURL: `${window.location.origin}/sign-in`,
       });
 
       if (res?.error) {
