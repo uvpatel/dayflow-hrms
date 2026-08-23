@@ -12,6 +12,11 @@ import {
   normalizeRole,
 } from "./permissions";
 import type { Employee } from "@/db/schema/employees";
+import {
+  AuthAccessError,
+  getAuthAccessIssue,
+} from "@/lib/auth/access";
+import { synchronizeAuthUserRole } from "@/lib/auth/roles";
 
 type InferredSession = typeof auth.$Infer.Session;
 export type BetterAuthUser = InferredSession["user"];
@@ -26,6 +31,17 @@ export interface AuthContext {
   permissions: Permission[];
 }
 
+export type ProtectedAuthContext = Omit<AuthContext, "employee"> & {
+  employee: Employee;
+};
+
+export function assertProtectedAuthContext(
+  context: AuthContext | null,
+): asserts context is ProtectedAuthContext {
+  const issue = getAuthAccessIssue(context);
+  if (issue) throw new AuthAccessError(issue);
+}
+
 /**
  * Resolves or links the Employee record corresponding to the authenticated User.
  */
@@ -38,6 +54,10 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
     .limit(1);
 
   if (empByUserId) {
+    const employeeRole = normalizeRole(empByUserId.role);
+    if (user.role !== employeeRole) {
+      await synchronizeAuthUserRole(user.id, employeeRole);
+    }
     return empByUserId;
   }
 
@@ -74,7 +94,10 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
           isNull(employees.userId),
         ))
         .returning();
-      if (linked) return linked;
+      if (linked) {
+        await synchronizeAuthUserRole(user.id, "employee");
+        return linked;
+      }
     }
   }
 
@@ -122,6 +145,19 @@ export async function getAuthContext(
 }
 
 /**
+ * Secure application boundary for pages and server actions. A Better Auth
+ * session alone is insufficient: the identity must resolve to a non-disabled
+ * employee record before it can enter the HRMS application.
+ */
+export async function getProtectedAuthContext(
+  requestHeaders?: Headers,
+): Promise<ProtectedAuthContext> {
+  const context = await getAuthContext(requestHeaders);
+  assertProtectedAuthContext(context);
+  return context;
+}
+
+/**
  * Helper to get current session.
  */
 export async function getCurrentSession(): Promise<BetterAuthSession | null> {
@@ -151,7 +187,8 @@ export async function getCurrentEmployee(): Promise<Employee | null> {
  */
 export async function requireAuth(requestHeaders?: Headers) {
   const ctx = await getAuthContext(requestHeaders);
-  if (!ctx) {
+  const accessIssue = getAuthAccessIssue(ctx);
+  if (accessIssue === "AUTH_REQUIRED") {
     return {
       error: NextResponse.json(
         {
@@ -167,14 +204,29 @@ export async function requireAuth(requestHeaders?: Headers) {
     };
   }
 
-  // Account status check
-  if (ctx.employee && ctx.employee.employmentStatus === "inactive") {
+  if (accessIssue === "EMPLOYEE_PROFILE_REQUIRED") {
     return {
       error: NextResponse.json(
         {
           success: false,
           error: {
-            code: "ACCOUNT_DISABLED",
+            code: accessIssue,
+            message: "A linked employee profile is required to access Dayflow.",
+          },
+        },
+        { status: 403 }
+      ),
+      ctx: null,
+    };
+  }
+
+  if (accessIssue === "ACCOUNT_DISABLED") {
+    return {
+      error: NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: accessIssue,
             message:
               "Your employee account has been deactivated. Please contact HR.",
           },
@@ -185,6 +237,7 @@ export async function requireAuth(requestHeaders?: Headers) {
     };
   }
 
+  assertProtectedAuthContext(ctx);
   return { error: null, ctx };
 }
 

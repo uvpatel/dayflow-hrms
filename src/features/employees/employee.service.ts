@@ -12,6 +12,7 @@ import { createEmployeeSchema, updateEmployeeSchema } from "./employee.schemas";
 import { validateManagerAssignment } from "./employee.domain";
 import type { NewEmployee } from "@/db/schema/employees";
 import { organizationRepository } from "@/features/organization/organization.repository";
+import { updateEmployeeRole } from "@/lib/auth/roles";
 
 export interface EmployeeListFilters {
   departmentId?: number;
@@ -354,10 +355,25 @@ export class EmployeeService {
       );
     }
 
-    const { managerId, ...employeeData } = data;
+    const { managerId, role, ...employeeData } = data;
     let updated = existing;
     if (Object.keys(employeeData).length > 0) {
       updated = await this.updateEmployee(id, employeeData);
+    }
+    if (role !== undefined) {
+      const roleUpdated = await updateEmployeeRole(id, role);
+      if (!roleUpdated) {
+        throw new NotFoundError(
+          `Employee with ID ${id} not found`,
+          "EMPLOYEE_NOT_FOUND",
+        );
+      }
+      updated = roleUpdated;
+      await logActivity({
+        organizationId: authContext.organizationId,
+        action: "EMPLOYEE_ROLE_UPDATED",
+        description: `Updated employee #${id} role to ${role}`,
+      });
     }
     if (managerId !== undefined) {
       updated = await this.assignManager(authContext, id, managerId);

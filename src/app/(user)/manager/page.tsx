@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAuthContext } from "@/lib/auth-context";
+import { requirePageAuthContext } from "@/lib/auth/page";
 import { ManagerDashboardClient } from "./manager-client";
 
 export const metadata = {
@@ -9,11 +9,7 @@ export const metadata = {
 };
 
 export default async function ManagerPage() {
-  const context = await getAuthContext(await headers());
-
-  if (!context) {
-    redirect("/sign-in");
-  }
+  const context = await requirePageAuthContext(await headers());
 
   // Manager page is accessible to 'manager', 'hr', and 'admin' roles
   if (

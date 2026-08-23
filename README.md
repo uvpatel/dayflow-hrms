@@ -77,7 +77,7 @@ BETTER_AUTH_TRUSTED_ORIGINS="http://localhost:3000"
 
 `AUTH_REQUIRE_EMAIL_VERIFICATION` defaults to `false` in development and `true` in production. Passwords must contain 12–128 characters. Use a comma-separated trusted-origin list for additional first-party deployment origins.
 
-`NEXT_PUBLIC_BETTER_AUTH_URL` is optional for this same-origin application and should normally be omitted. Public Next.js environment values are embedded at build time, so a development URL there can break a production deployment.
+Do not set `NEXT_PUBLIC_BETTER_AUTH_URL`. Dayflow uses Better Auth on the same origin at `/api/auth`; the server-only `BETTER_AUTH_URL` is the canonical URL used for verification and OAuth callbacks.
 
 Optional GitHub OAuth:
 
@@ -122,6 +122,28 @@ bun run db:seed
 ```
 
 Do not use `db:push` against production, reset migration history, or run the seed against shared data.
+
+Existing Better Auth 1.6 databases need a reviewed account-identity backfill
+before Better Auth 1.7 can authenticate their credential accounts. The first
+command is a read-only preflight and deliberately exits without changing data:
+
+```bash
+bun run db:repair-auth
+```
+
+Only after confirming the sanitized target database, taking a Neon backup or
+branch, and pausing authentication writes, apply the scoped repair:
+
+```bash
+CONFIRM_AUTH_DB_REPAIR=1 bun run db:repair-auth
+```
+
+The repair supports this application's `credential` and `github` providers,
+checks for identity collisions, runs in one transaction, and verifies the
+non-null issuer plus unique `(issuer, account_id)` contract. It refuses to infer
+a missing issuer for an unknown provider. It does not create missing Better
+Auth tables or admin columns, migrate unrelated application data, or modify the
+Drizzle migration ledger.
 
 ## Run the application
 
@@ -206,7 +228,7 @@ bun run build
 
 See [TESTING.md](./TESTING.md) for focused and manual workflow coverage.
 
-At the documentation checkpoint on 2026-08-22, `bun test` passed all 26 unit tests with 77 assertions across `tests/permissions.test.ts` and `tests/business-domain.test.ts`. No database-backed migration, seed, route, concurrency, or rollback test was run. Lint, typecheck, and production-build results should be taken from the final verification run rather than inferred from the unit-test result.
+At the documentation checkpoint on 2026-08-22, `bun test` passed all 32 unit tests with 106 assertions across the business-domain, authentication-access, and permissions suites. A read-only Better Auth database preflight and local auth-route smoke test were also run; no production data migration, seed, concurrency, or rollback test was performed. Lint, typecheck, and production-build results should be taken from the final verification run rather than inferred from the unit-test result.
 
 ## Documentation
 
@@ -221,8 +243,8 @@ At the documentation checkpoint on 2026-08-22, `bun test` passed all 26 unit tes
 Do not deploy this branch as a complete production HR/payroll system until the limitations above are accepted or resolved and all pending migrations are validated on representative data.
 
 - Set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, and all provider/email secrets in the Vercel Production environment. For this deployment, both URL values must use `https://dayflow-hrms-eight.vercel.app`.
-- Leave `NEXT_PUBLIC_BETTER_AUTH_URL` unset for same-origin authentication. If it is set, it must use the production origin and the deployment must be rebuilt after changing it.
-- Take a verified Neon backup or branch, run duplicate/orphan/cast preflight checks, rehearse every pending migration on representative data, and only then run `bun run db:migrate` once against the reviewed production `DATABASE_URL`. Do not put migrations in the Vercel build command and do not use `db:push` in production.
+- Leave `NEXT_PUBLIC_BETTER_AUTH_URL` unset so every browser calls `/api/auth` on its current deployment origin.
+- Inspect the Drizzle migration ledger before applying anything. If tables exist but the ledger is empty, do not replay the full migration history. For a Better Auth 1.7 account-only upgrade, take a verified Neon backup or branch, pause auth writes, run `bun run db:repair-auth`, review its target and counts, then run the confirmed repair shown above. Use `db:migrate` only after rehearsing the actual pending chain on a representative branch. Never put migrations in the Vercel build command or use `db:push` in production.
 - Verify that the production database contains the singular `user`, `session`, `account`, and `verification` auth tables. OAuth initiation requires insert access to `verification`, and Better Auth 1.7 requires the non-null `account.issuer` column.
 - Configure GitHub's production callback URL as `https://dayflow-hrms-eight.vercel.app/api/auth/callback/github`.
 - Redeploy after changing any Vercel environment variable; changes do not affect an existing deployment.

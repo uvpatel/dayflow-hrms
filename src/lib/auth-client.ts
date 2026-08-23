@@ -6,9 +6,9 @@ import {
 import type { auth } from "@/lib/auth";
 
 export const authClient = createAuthClient({
-  ...(process.env.NEXT_PUBLIC_BETTER_AUTH_URL
-    ? { baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL }
-    : {}),
+  // Dayflow serves the UI and Better Auth from the same Next.js origin.
+  // Let the browser resolve /api/auth on its current origin so local,
+  // preview, and production deployments cannot accidentally call each other.
   plugins: [inferAdditionalFields<typeof auth>(), adminClient()],
 });
 

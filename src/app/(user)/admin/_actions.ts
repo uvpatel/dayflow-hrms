@@ -2,16 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { getAuthContext } from "@/lib/auth-context";
-import { db } from "@/db";
-import { user, employees } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getProtectedAuthContext } from "@/lib/auth-context";
 import { isRole } from "@/lib/permissions";
+import { updateLinkedUserRole } from "@/lib/auth/roles";
 
 export async function setRole(formData: FormData) {
-  const ctx = await getAuthContext(await headers());
+  const ctx = await getProtectedAuthContext(await headers());
 
-  if (!ctx || ctx.role !== "admin") {
+  if (ctx.role !== "admin" || ctx.organizationId == null) {
     throw new Error("Unauthorized: Admin permission required");
   }
 
@@ -22,31 +20,21 @@ export async function setRole(formData: FormData) {
     throw new Error("A valid user ID and Dayflow role are required");
   }
 
-  // Update auth user table
-  await db
-    .update(user)
-    .set({
-      role,
-      updatedAt: new Date(),
-    })
-    .where(eq(user.id, id));
-
-  // Sync with employee record if linked
-  await db
-    .update(employees)
-    .set({
-      role,
-      updatedAt: new Date(),
-    })
-    .where(eq(employees.userId, id));
+  const updated = await updateLinkedUserRole(id, ctx.organizationId, role);
+  if (!updated) {
+    throw new Error(
+      "The selected user is not linked to an employee in your organization",
+    );
+  }
 
   revalidatePath("/admin");
+  revalidatePath("/dashboard/organization/roles");
 }
 
 export async function removeRole(formData: FormData) {
-  const ctx = await getAuthContext(await headers());
+  const ctx = await getProtectedAuthContext(await headers());
 
-  if (!ctx || ctx.role !== "admin") {
+  if (ctx.role !== "admin" || ctx.organizationId == null) {
     throw new Error("Unauthorized: Admin permission required");
   }
 
@@ -56,21 +44,17 @@ export async function removeRole(formData: FormData) {
     throw new Error("Missing id");
   }
 
-  await db
-    .update(user)
-    .set({
-      role: "employee",
-      updatedAt: new Date(),
-    })
-    .where(eq(user.id, id));
-
-  await db
-    .update(employees)
-    .set({
-      role: "employee",
-      updatedAt: new Date(),
-    })
-    .where(eq(employees.userId, id));
+  const updated = await updateLinkedUserRole(
+    id,
+    ctx.organizationId,
+    "employee",
+  );
+  if (!updated) {
+    throw new Error(
+      "The selected user is not linked to an employee in your organization",
+    );
+  }
 
   revalidatePath("/admin");
+  revalidatePath("/dashboard/organization/roles");
 }

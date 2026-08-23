@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins/admin";
+import { after } from "next/server";
 import { db } from "@/db";
 import { employees } from "@/db/schema/employees";
 import * as schema from "@/db/schema/auth-schema";
@@ -27,9 +28,7 @@ function getVercelBaseURL(): string | undefined {
 }
 
 const configuredBaseURL =
-  process.env.BETTER_AUTH_URL ||
-  getVercelBaseURL() ||
-  process.env.NEXT_PUBLIC_BETTER_AUTH_URL;
+  process.env.BETTER_AUTH_URL || getVercelBaseURL();
 
 if (isProduction && (!authSecret || authSecret.length < 32)) {
   throw new Error(
@@ -109,7 +108,7 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 30,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      await sendPasswordResetEmail(user.email, url, user.name);
+      after(() => sendPasswordResetEmail(user.email, url, user.name));
     },
   },
   emailVerification: {
@@ -118,7 +117,7 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     expiresIn: 60 * 60,
     sendVerificationEmail: async ({ user, url }) => {
-      await sendVerificationEmail(user.email, url, user.name);
+      after(() => sendVerificationEmail(user.email, url, user.name));
     },
   },
   user: {

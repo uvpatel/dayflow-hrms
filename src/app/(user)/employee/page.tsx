@@ -1,6 +1,5 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { getAuthContext } from "@/lib/auth-context";
+import { requirePageAuthContext } from "@/lib/auth/page";
 import { EmployeeDashboardClient } from "./employee-client";
 
 export const metadata = {
@@ -9,11 +8,7 @@ export const metadata = {
 };
 
 export default async function EmployeePage() {
-  const context = await getAuthContext(await headers());
-
-  if (!context) {
-    redirect("/sign-in");
-  }
+  const context = await requirePageAuthContext(await headers());
 
   return <EmployeeDashboardClient userRole={context.role} />;
 }

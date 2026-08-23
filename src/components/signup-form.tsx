@@ -45,10 +45,12 @@ export function SignupForm({
   className,
   callbackURL = "/auth/redirect",
   githubEnabled = false,
+  initialError,
   ...props
 }: React.ComponentProps<"div"> & {
   callbackURL?: string;
   githubEnabled?: boolean;
+  initialError?: string;
 }) {
   const router = useRouter();
   const safeCallbackURL = sanitizeCallbackPath(callbackURL);
@@ -61,7 +63,7 @@ export function SignupForm({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGithubLoading, setIsGithubLoading] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(initialError ?? null);
   const [fieldErrors, setFieldErrors] = useState<{
     name?: string;
     employeeNumber?: string;

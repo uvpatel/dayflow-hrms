@@ -45,10 +45,12 @@ export function LoginForm({
   className,
   callbackURL = "/auth/redirect",
   githubEnabled = false,
+  initialError,
   ...props
 }: React.ComponentProps<"div"> & {
   callbackURL?: string;
   githubEnabled?: boolean;
+  initialError?: string;
 }) {
   const router = useRouter();
   const safeCallbackURL = sanitizeCallbackPath(callbackURL);
@@ -57,7 +59,7 @@ export function LoginForm({
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isGithubLoading, setIsGithubLoading] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(initialError ?? null);
   const [fieldErrors, setFieldErrors] = useState<{
     email?: string;
     password?: string;

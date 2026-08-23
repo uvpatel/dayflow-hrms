@@ -4,9 +4,10 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import {
   getAuthContext as resolveAuthContext,
-  type AuthContext as ResolvedAuthContext,
+  type ProtectedAuthContext,
 } from "@/lib/auth-context";
 import { AuthenticationError, AuthorizationError } from "@/lib/api/errors";
+import { getAuthAccessIssue } from "@/lib/auth/access";
 import { type Permission, hasPermission } from "@/lib/permissions";
 
 /**
@@ -14,7 +15,7 @@ import { type Permission, hasPermission } from "@/lib/permissions";
  * delegated to `auth-context`, which derives it from the linked employee
  * record rather than trusting a browser-provided or legacy auth-user role.
  */
-export type AuthContext = ResolvedAuthContext;
+export type AuthContext = ProtectedAuthContext;
 
 export async function getAuthSession(request?: NextRequest) {
   try {
@@ -33,16 +34,23 @@ export async function requireAuth(request?: NextRequest) {
 
 export async function getAuthContext(request?: NextRequest): Promise<AuthContext> {
   const context = await resolveAuthContext(request?.headers);
+  const accessIssue = getAuthAccessIssue(context);
 
-  if (!context) {
+  if (accessIssue === "AUTH_REQUIRED") {
     throw new AuthenticationError("Authentication required to access this resource");
   }
 
-  if (context.employee?.employmentStatus === "inactive") {
+  if (accessIssue === "EMPLOYEE_PROFILE_REQUIRED") {
+    throw new AuthorizationError(
+      "A linked employee profile is required to access Dayflow",
+    );
+  }
+
+  if (accessIssue === "ACCOUNT_DISABLED") {
     throw new AuthorizationError("Your employee account has been deactivated. Please contact HR.");
   }
 
-  return context;
+  return context as AuthContext;
 }
 
 export function requirePermission(context: AuthContext, permission: Permission): void {

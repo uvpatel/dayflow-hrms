@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { getTableColumns } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 
 import {
   canAccessEmployeeResource,
@@ -8,7 +9,12 @@ import {
   hasPermission,
   normalizeRole,
 } from "../src/lib/permissions";
-import { account } from "../src/db/schema/auth-schema";
+import {
+  account,
+  session,
+  user,
+  verification,
+} from "../src/db/schema/auth-schema";
 import { getRoleLandingPath } from "../src/lib/auth/landing";
 import { sanitizeCallbackPath } from "../src/lib/auth/redirects";
 
@@ -81,8 +87,32 @@ describe("role permissions", () => {
 });
 
 describe("Better Auth account schema", () => {
-  test("maps the issuer column required for OAuth account lookup", () => {
-    expect(getTableColumns(account).issuer.name).toBe("issuer");
+  test("enforces the Better Auth 1.7 account identity contract", () => {
+    const columns = getTableColumns(account);
+    const indexes = getTableConfig(account).indexes;
+    const identityIndex = indexes.find(
+      (index) => index.config.name === "account_issuer_account_id_uidx",
+    );
+
+    expect(columns.issuer.name).toBe("issuer");
+    expect(columns.issuer.notNull).toBe(true);
+    expect(identityIndex?.config.unique).toBe(true);
+    expect(identityIndex?.config.columns.map((column) => column.name)).toEqual([
+      "issuer",
+      "account_id",
+    ]);
+  });
+
+  test("includes the admin plugin fields and required lookup indexes", () => {
+    expect(Object.keys(getTableColumns(user))).toEqual(
+      expect.arrayContaining(["role", "banned", "banReason", "banExpires"]),
+    );
+    expect(getTableConfig(session).indexes.map((index) => index.config.name)).toContain(
+      "session_userId_idx",
+    );
+    expect(
+      getTableConfig(verification).indexes.map((index) => index.config.name),
+    ).toContain("verification_identifier_idx");
   });
 });
 

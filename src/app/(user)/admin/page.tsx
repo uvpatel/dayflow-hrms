@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { user } from "@/db/schema/auth-schema";
-import { ilike, or, desc } from "drizzle-orm";
+import { employees } from "@/db/schema/employees";
+import { and, desc, eq, ilike, or } from "drizzle-orm";
 import SearchUsers from "./SearchUser";
 import { removeRole, setRole } from "./_actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,22 +17,20 @@ type AdminDashboardProps = {
   }>;
 };
 
-import { getAuthContext } from "@/lib/auth-context";
+import { requirePageAuthContext } from "@/lib/auth/page";
 
 export default async function AdminDashboard({
   searchParams,
 }: AdminDashboardProps) {
-  const ctx = await getAuthContext(await headers());
-
-  if (!ctx) {
-    redirect("/sign-in");
-  }
+  const ctx = await requirePageAuthContext(await headers());
 
   if (ctx.role !== "admin") {
     redirect("/dashboard");
   }
 
- 
+  if (ctx.organizationId == null) {
+    redirect("/auth/access-denied?reason=employee_profile_required");
+  }
 
   const { search } = await searchParams;
   const query =
@@ -41,10 +40,22 @@ export default async function AdminDashboard({
       ? search[0]?.trim()
       : undefined;
 
+  const organizationMember = and(
+    eq(employees.userId, user.id),
+    eq(employees.organizationId, ctx.organizationId),
+  );
+  const selectedUser = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: employees.role,
+    createdAt: user.createdAt,
+  };
   const usersList = query
     ? await db
-        .select()
+        .select(selectedUser)
         .from(user)
+        .innerJoin(employees, organizationMember)
         .where(
           or(
             ilike(user.name, `%${query}%`),
@@ -53,8 +64,9 @@ export default async function AdminDashboard({
         )
         .limit(20)
     : await db
-        .select()
+        .select(selectedUser)
         .from(user)
+        .innerJoin(employees, organizationMember)
         .orderBy(desc(user.createdAt))
         .limit(20);
 
