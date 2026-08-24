@@ -116,6 +116,15 @@ describe("Better Auth account schema", () => {
   });
 });
 
+describe("Better Auth OAuth state storage", () => {
+  test("does not require a verification-table insert before social redirect", async () => {
+    const authSource = await Bun.file("src/lib/auth.ts").text();
+
+    expect(authSource).toContain('storeStateStrategy: "cookie"');
+    expect(authSource).not.toContain('storeStateStrategy: "database"');
+  });
+});
+
 describe("post-authentication routing", () => {
   test("routes only administrators to the protected admin area", () => {
     expect(getRoleLandingPath("admin")).toBe("/admin");

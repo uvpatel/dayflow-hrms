@@ -194,7 +194,11 @@ export const auth = betterAuth({
   },
   account: {
     encryptOAuthTokens: true,
-    storeStateStrategy: "database",
+    // OAuth state is short-lived and already protected by Better Auth's signed,
+    // HTTP-only SameSite cookie. Keeping it out of PostgreSQL prevents the
+    // initial provider redirect from depending on the verification table and
+    // is safer during zero-downtime schema rollouts.
+    storeStateStrategy: "cookie",
     accountLinking: {
       enabled: true,
       trustedProviders: ["github"],
