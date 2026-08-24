@@ -9,6 +9,7 @@ import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email/servi
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { serverEnv } from "@/lib/env";
+import { resolveTrustedOrigins } from "@/lib/auth/url";
 
 const isProduction = process.env.NODE_ENV === "production";
 const authSecret = serverEnv.BETTER_AUTH_SECRET;
@@ -40,27 +41,10 @@ const requireEmailVerification = readBooleanSetting(
 );
 
 const baseURL = serverEnv.BETTER_AUTH_URL;
-const trustedOrigins = new Set<string>();
+const trustedOrigins = resolveTrustedOrigins();
 
-for (const candidate of [
-  baseURL,
-  ...(isProduction
-    ? []
-    : ["http://localhost:3000", "http://127.0.0.1:3000"]),
-  ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS || "").split(","),
-]) {
-  const value = candidate.trim();
-  if (!value) continue;
-
-  try {
-    trustedOrigins.add(new URL(value).origin);
-  } catch {
-    throw new Error(`Invalid Better Auth trusted origin: ${value}`);
-  }
-}
-
-const githubClientId = process.env.GITHUB_CLIENT_ID;
-const githubClientSecret = process.env.GITHUB_CLIENT_SECRET;
+const githubClientId = process.env.GITHUB_CLIENT_ID?.trim() || undefined;
+const githubClientSecret = process.env.GITHUB_CLIENT_SECRET?.trim() || undefined;
 
 if (Boolean(githubClientId) !== Boolean(githubClientSecret)) {
   throw new Error(
@@ -224,6 +208,7 @@ export const auth = betterAuth({
   },
   advanced: {
     useSecureCookies: isProduction,
+    trustedProxyHeaders: true,
     disableCSRFCheck: false,
     disableOriginCheck: false,
     defaultCookieAttributes: {
@@ -233,6 +218,6 @@ export const auth = betterAuth({
     },
   },
   ...(authSecret ? { secret: authSecret } : {}),
-  baseURL,
-  trustedOrigins: [...trustedOrigins],
+  ...(baseURL ? { baseURL } : {}),
+  trustedOrigins,
 });

@@ -1,17 +1,18 @@
 import "server-only";
 
 import { z } from "zod";
+import { resolveCanonicalAuthUrl } from "@/lib/auth/url";
 
 const serverEnvSchema = z.object({
-  BETTER_AUTH_URL: z.url().transform((value) => new URL(value).origin),
+  BETTER_AUTH_URL: z.string().optional(),
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
 });
 
+const resolvedAuthUrl = resolveCanonicalAuthUrl();
+
 const parsed = serverEnvSchema.safeParse({
-  BETTER_AUTH_URL:
-    process.env.BETTER_AUTH_URL ??
-    (process.env.NODE_ENV === "production" ? undefined : "http://localhost:3000"),
-  BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+  BETTER_AUTH_URL: resolvedAuthUrl,
+  BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET?.trim(),
 });
 
 if (!parsed.success) {
