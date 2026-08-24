@@ -36,7 +36,7 @@ function readBooleanSetting(
 
 const requireEmailVerification = readBooleanSetting(
   process.env.AUTH_REQUIRE_EMAIL_VERIFICATION,
-  isProduction,
+  true,
   "AUTH_REQUIRE_EMAIL_VERIFICATION",
 );
 

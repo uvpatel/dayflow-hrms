@@ -83,11 +83,11 @@ export function resolveTrustedOrigins(): string[] {
 
   // 3. Add Vercel system environment origins if present
   const vercelProd = normalizeAuthOrigin(
-    process.env.BETTER_AUTH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
   );
   if (vercelProd) origins.add(vercelProd);
 
-  const vercelUrl = normalizeAuthOrigin(process.env.BETTER_AUTH_URL);
+  const vercelUrl = normalizeAuthOrigin(process.env.VERCEL_URL);
   if (vercelUrl) origins.add(vercelUrl);
 
   // 4. Always trust Vercel preview wildcard patterns

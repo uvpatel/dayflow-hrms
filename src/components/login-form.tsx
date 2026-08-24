@@ -203,9 +203,12 @@ export function LoginForm({
               <Field>
                 <div className="flex items-center">
                   <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    Contact HR to reset access
-                  </span>
+                  <Link
+                    href={`/forgot-password?email=${encodeURIComponent(email.trim())}`}
+                    className="ml-auto text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
                 <div className="relative">
                   <Input

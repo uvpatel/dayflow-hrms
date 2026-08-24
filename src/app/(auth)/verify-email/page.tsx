@@ -2,8 +2,13 @@ import Link from "next/link";
 import { MailCheck, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ResendVerificationButton } from "@/components/resend-verification-button";
 
-export default function VerifyEmailPage() {
+type VerifyEmailPageProps = { searchParams: Promise<{ email?: string | string[] }> };
+
+export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageProps) {
+  const params = await searchParams;
+  const email = Array.isArray(params.email) ? params.email[0] : params.email;
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
       <div className="w-full max-w-md">
@@ -22,6 +27,7 @@ export default function VerifyEmailPage() {
               Didn&apos;t receive an email? Check your spam folder or contact your HR administrator for an invitation link.
             </div>
             <div className="flex flex-col gap-2">
+              <ResendVerificationButton email={email} />
               <Link href="/sign-in" className="w-full">
                 <Button className="w-full">
                   <ArrowLeft className="mr-2 size-4" />
