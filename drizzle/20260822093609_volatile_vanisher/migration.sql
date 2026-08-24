@@ -1,4 +1,4 @@
-ALTER TABLE "activity_logs" ADD COLUMN "organization_id" integer;--> statement-breakpoint
+ALTER TABLE "activity_logs" ADD COLUMN IF NOT EXISTS "organization_id" integer;--> statement-breakpoint
 DO $$
 DECLARE
 	organization_count integer;
@@ -46,5 +46,9 @@ END $$;--> statement-breakpoint
 ALTER TABLE "leave_policies" ALTER COLUMN "organization_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "salary_components" ALTER COLUMN "organization_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "salary_structures" ALTER COLUMN "organization_id" SET NOT NULL;--> statement-breakpoint
-CREATE INDEX "activity_logs_org_id_idx" ON "activity_logs" ("organization_id");--> statement-breakpoint
-ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_organization_id_organizations_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS "activity_logs_org_id_idx" ON "activity_logs" ("organization_id");--> statement-breakpoint
+DO $$ BEGIN
+    ALTER TABLE "activity_logs" ADD CONSTRAINT "activity_logs_organization_id_organizations_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;

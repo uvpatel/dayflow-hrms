@@ -1,4 +1,4 @@
-CREATE TABLE "account" (
+CREATE TABLE IF NOT EXISTS "account" (
 	"id" text PRIMARY KEY,
 	"account_id" text NOT NULL,
 	"provider_id" text NOT NULL,
@@ -15,7 +15,7 @@ CREATE TABLE "account" (
 	"updated_at" timestamp NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "session" (
+CREATE TABLE IF NOT EXISTS "session" (
 	"id" text PRIMARY KEY,
 	"expires_at" timestamp NOT NULL,
 	"token" text NOT NULL UNIQUE,
@@ -26,7 +26,7 @@ CREATE TABLE "session" (
 	"user_id" text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "user" (
+CREATE TABLE IF NOT EXISTS "user" (
 	"id" text PRIMARY KEY,
 	"name" text NOT NULL,
 	"email" text NOT NULL UNIQUE,
@@ -36,7 +36,7 @@ CREATE TABLE "user" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "verification" (
+CREATE TABLE IF NOT EXISTS "verification" (
 	"id" text PRIMARY KEY,
 	"identifier" text NOT NULL,
 	"value" text NOT NULL,
@@ -45,12 +45,20 @@ CREATE TABLE "verification" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-DROP TABLE "accounts";--> statement-breakpoint
-DROP TABLE "sessions";--> statement-breakpoint
-DROP TABLE "users";--> statement-breakpoint
-DROP TABLE "verifications";--> statement-breakpoint
-CREATE INDEX "account_userId_idx" ON "account" ("user_id");--> statement-breakpoint
-CREATE INDEX "session_userId_idx" ON "session" ("user_id");--> statement-breakpoint
-CREATE INDEX "verification_identifier_idx" ON "verification" ("identifier");--> statement-breakpoint
-ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;--> statement-breakpoint
-ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;
+DROP TABLE IF EXISTS "accounts";--> statement-breakpoint
+DROP TABLE IF EXISTS "sessions";--> statement-breakpoint
+DROP TABLE IF EXISTS "users";--> statement-breakpoint
+DROP TABLE IF EXISTS "verifications";--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "account_userId_idx" ON "account" ("user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "session_userId_idx" ON "session" ("user_id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "verification_identifier_idx" ON "verification" ("identifier");--> statement-breakpoint
+DO $$ BEGIN
+    ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+    ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
