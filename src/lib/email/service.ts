@@ -54,11 +54,8 @@ export async function sendEmail(payload: EmailPayload): Promise<{ success: boole
   });
 
   if (!response.ok) {
-    const providerMessage = await response.text().catch(() => "");
     throw new Error(
-      `Transactional email provider rejected the request (${response.status})${
-        providerMessage ? `: ${providerMessage.slice(0, 200)}` : ""
-      }`
+      `Transactional email provider rejected the request (${response.status}).`,
     );
   }
 

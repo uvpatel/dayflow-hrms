@@ -33,7 +33,7 @@ Known limitations and unverified areas:
 - The payroll workflow manages entered gross/deduction amounts and publication state, but it is not a statutory tax, benefits, or formula engine. Salary structures/components and `payslip_items` are not wired into payslip calculations.
 - Some legacy support tables and identifiers do not yet have tenant columns or foreign keys; these are listed in [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md). Organization IDs newly added to legacy leave-policy and salary-catalog rows are nullable until existing data is backfilled.
 - The generic approval table is actor-scoped in services but is not relationally linked to its source leave/correction record, and activity logs do not carry organization or actor keys.
-- Authentication context resolution can create/link employee and default-organization records during a read and should be separated into an explicit onboarding flow.
+- Authentication context resolution can atomically claim an already provisioned employee record for a verified user during the first authenticated read; it never creates an employee or organization.
 - Rate limiting uses in-process memory, so a shared store is still needed for consistent limits across multiple production instances.
 - The generated migrations and seed definition were not executed against a database during this implementation pass; database constraints, transactions, concurrency, and legacy-data conversion therefore remain unverified in a real database.
 
@@ -73,11 +73,12 @@ BETTER_AUTH_SECRET="a-random-secret-with-at-least-32-characters"
 BETTER_AUTH_URL="http://localhost:3000"
 AUTH_REQUIRE_EMAIL_VERIFICATION="false"
 BETTER_AUTH_TRUSTED_ORIGINS="http://localhost:3000"
+AUTH_TRUST_PROXY_HEADERS=""
 ```
 
-`AUTH_REQUIRE_EMAIL_VERIFICATION` defaults to `false` in development and `true` in production. Passwords must contain 12–128 characters. Use a comma-separated trusted-origin list for additional first-party deployment origins.
+`AUTH_REQUIRE_EMAIL_VERIFICATION` defaults to `true` in every environment; set it to `false` explicitly only for local development when that is intentional. Passwords must contain 12–128 characters. Use a comma-separated trusted-origin list for additional first-party deployment origins. Production entries must be explicit HTTPS origins; `*` and the broad `https://*.vercel.app` pattern are rejected.
 
-Do not set `NEXT_PUBLIC_BETTER_AUTH_URL`. Dayflow uses Better Auth on the same origin at `/api/auth`; the server-only `BETTER_AUTH_URL` is the canonical URL used for verification and OAuth callbacks.
+Do not set `NEXT_PUBLIC_BETTER_AUTH_URL`. Dayflow uses Better Auth on the same origin at `/api/auth`. The server resolves one canonical server-only origin, then Better Auth 1.7 validates each request against exact configured/Vercel hosts so OAuth state cookies and callbacks stay on the initiating host.
 
 Optional GitHub OAuth:
 
@@ -102,7 +103,7 @@ For local GitHub OAuth, configure the callback URL as:
 http://localhost:3000/api/auth/callback/github
 ```
 
-Production must use an HTTPS `BETTER_AUTH_URL`, a unique high-entropy secret, and an explicit trusted origin. Never commit `.env`.
+Production must use an HTTPS `BETTER_AUTH_URL`, a unique high-entropy secret, and an explicit trusted origin. Leave `AUTH_TRUST_PROXY_HEADERS` empty on Vercel; it is enabled only when Vercel exposes `VERCEL=1`. Never commit `.env`.
 
 ## Database workflow
 
@@ -226,9 +227,13 @@ bun test
 bun run build
 ```
 
+Run the build with the Vercel Production environment or equivalent
+production-like server-only values loaded. The localhost `.env` intentionally
+fails the production auth guard during `next build`; see [TESTING.md](./TESTING.md).
+
 See [TESTING.md](./TESTING.md) for focused and manual workflow coverage.
 
-At the documentation checkpoint on 2026-08-22, `bun test` passed all 32 unit tests with 106 assertions across the business-domain, authentication-access, and permissions suites. A read-only Better Auth database preflight and local auth-route smoke test were also run; no production data migration, seed, concurrency, or rollback test was performed. Lint, typecheck, and production-build results should be taken from the final verification run rather than inferred from the unit-test result.
+The authentication regression suite covers canonical URL resolution, production fail-fast behavior, exact trusted hosts, callback sanitization, access states, handler uniqueness, and namespace ownership. A read-only Better Auth database preflight and local auth-route smoke test do not replace a production OAuth/session test; no production migration, seed, or write was performed by the audit.
 
 ## Documentation
 
@@ -236,21 +241,26 @@ At the documentation checkpoint on 2026-08-22, `bun test` passed all 32 unit tes
 - [API reference](./API_DOCUMENTATION.md)
 - [Database schema](./DATABASE_SCHEMA.md)
 - [Testing guide](./TESTING.md)
+- [Authentication production runbook](./docs/AUTH_PRODUCTION.md)
 - [Workflow reference](https://link.excalidraw.com/l/65VNwvy7c4X/58RLEJ4oOwh)
 
 ## Deployment checklist
 
 Do not deploy this branch as a complete production HR/payroll system until the limitations above are accepted or resolved and all pending migrations are validated on representative data.
 
-- Set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, and all provider/email secrets in the Vercel Production environment. For this deployment, both URL values must use `https://dayflow-hrms-eight.vercel.app`.
+- Set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, `AUTH_REQUIRE_EMAIL_VERIFICATION`, and all GitHub/email variables in the correct Vercel Development, Preview, and Production scopes. `BETTER_AUTH_URL` is the root HTTPS application origin, never `/api/auth`.
 - Leave `NEXT_PUBLIC_BETTER_AUTH_URL` unset so every browser calls `/api/auth` on its current deployment origin.
+- Enable Vercel system environment variables. Leave `AUTH_TRUST_PROXY_HEADERS` unset on Vercel; exact production, branch, and deployment hosts are allowlisted from Vercel's system values.
 - Inspect the Drizzle migration ledger before applying anything. If tables exist but the ledger is empty, do not replay the full migration history. For a Better Auth 1.7 account-only upgrade, take a verified Neon backup or branch, pause auth writes, run `bun run db:repair-auth`, review its target and counts, then run the confirmed repair shown above. Use `db:migrate` only after rehearsing the actual pending chain on a representative branch. Never put migrations in the Vercel build command or use `db:push` in production.
 - Verify that the production database contains the singular `user`, `session`, `account`, and `verification` auth tables. OAuth initiation requires insert access to `verification`, and Better Auth 1.7 requires the non-null `account.issuer` column.
-- Configure GitHub's production callback URL as `https://dayflow-hrms-eight.vercel.app/api/auth/callback/github`.
+- Configure each bounded GitHub callback as `https://<host>/api/auth/callback/github`; use separate development/preview and production OAuth apps when practical.
 - Redeploy after changing any Vercel environment variable; changes do not affect an existing deployment.
-- Confirm email delivery before requiring verification in production.
+- Keep `AUTH_REQUIRE_EMAIL_VERIFICATION=true` in production and previews, and
+  confirm email delivery before deployment. Only local development may opt out.
 - Run lint, typecheck, tests, and the production build.
 - Verify employee, manager, HR, and admin accounts against the route-access matrix.
 - Confirm that payroll, audit logs, and cross-employee URLs return no unauthorized data.
+
+The complete environment matrix, safe migration sequence, health check, GitHub callback rules, and post-deployment flow checklist are in [the authentication production runbook](./docs/AUTH_PRODUCTION.md).
 
 Development seed credentials are printed only by the seed command and use fictional `@dayflow.dev` identities. The seed was not executed during this implementation pass, and its fixed credentials must never be deployed as production accounts.

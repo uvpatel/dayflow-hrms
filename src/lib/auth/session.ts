@@ -9,6 +9,7 @@ import {
 import { AuthenticationError, AuthorizationError } from "@/lib/api/errors";
 import { getAuthAccessIssue } from "@/lib/auth/access";
 import { type Permission, hasPermission } from "@/lib/permissions";
+import { logAuthDiagnostic } from "@/lib/auth/diagnostics";
 
 /**
  * Compatibility surface for API routes and services. Role resolution is
@@ -22,7 +23,11 @@ export async function getAuthSession(request?: NextRequest) {
     return await auth.api.getSession({
       headers: request?.headers ?? (await headers()),
     });
-  } catch {
+  } catch (error) {
+    logAuthDiagnostic("AUTH_SESSION_ERROR", {
+      stage: "get-auth-session",
+      error,
+    });
     return null;
   }
 }

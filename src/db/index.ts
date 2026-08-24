@@ -6,7 +6,23 @@ import * as schema from "./schema";
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  throw new Error("DATABASE_URL environment variable is not defined");
+  throw new Error(
+    "AUTH_CONFIGURATION_ERROR: DATABASE_URL environment variable is not defined.",
+  );
+}
+
+try {
+  const parsedDatabaseUrl = new URL(databaseUrl);
+  if (
+    !["postgres:", "postgresql:"].includes(parsedDatabaseUrl.protocol) ||
+    !parsedDatabaseUrl.hostname
+  ) {
+    throw new Error("invalid PostgreSQL URL");
+  }
+} catch {
+  throw new Error(
+    "AUTH_CONFIGURATION_ERROR: DATABASE_URL must be a valid PostgreSQL connection URL.",
+  );
 }
 
 export const sql = neon(databaseUrl);

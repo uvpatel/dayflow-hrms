@@ -4,12 +4,25 @@ Dayflow uses Bun's test runner, TypeScript, ESLint, and the Next.js production c
 
 ## Current verification status
 
-At the 2026-08-22 documentation checkpoint:
+At the 2026-08-24 authentication audit checkpoint:
 
-- `bun test` passed **26 tests, 0 failed, 77 assertions** across two files.
-- `tests/permissions.test.ts` contains 12 permission, auth-schema, page-policy, and redirect tests.
-- `tests/business-domain.test.ts` contains 14 attendance, manager-assignment, leave, and payroll-money tests.
-- This pass generated `drizzle/20260822083351_worthless_mister_fear` and the final follow-up `drizzle/20260822092821_mysterious_zemo`; a subsequent `db:generate` reported no additional schema changes.
+- `bun test` passed **32 tests, 0 failed, 109 assertions** across four files.
+- `tests/auth-url.test.ts` covers canonical URL resolution, strict production
+  validation, exact origins, scoped wildcard rules, and the dynamic request-host
+  allowlist.
+- `tests/auth-access.test.ts` covers the employee access boundary and safe OAuth
+  callback paths.
+- `tests/auth-routing.test.ts` proves there is one Better Auth handler and no
+  business API beneath `/api/auth`.
+- `tests/auth-config.test.ts` exercises production startup guards for GitHub
+  credentials and verification-email delivery.
+- `drizzle-kit check` succeeded and `drizzle-kit generate --explain --output
+  json` reported `no_changes`.
+- A production-configured `bun run build --webpack` completed all compilation,
+  TypeScript, page-generation, and trace-collection stages. The default
+  Turbopack build was also attempted, but this execution sandbox denied the
+  CSS worker's internal port with `EPERM`; no application diagnostic preceded
+  that environment-level failure.
 - No migration, seed, database-backed route test, concurrent workflow test, or rollback test was executed.
 - Lint, typecheck, and production-build results are separate quality gates and are not implied by the unit-test result.
 
@@ -21,19 +34,32 @@ These commands do not mutate the database:
 bun run lint
 bun run typecheck
 bun test
+```
+
+`next build` runs with `NODE_ENV=production`, and Dayflow deliberately rejects
+the localhost development URL, disabled verification, or missing production
+providers in that mode. Load the Vercel Production environment (or an
+equivalent safe production-like environment) before running the exact build
+command:
+
+```bash
 bun run build
 ```
+
+A bare build using the recommended localhost `.env` is expected to stop with
+`AUTH_CONFIGURATION_ERROR`; that fail-fast behavior is the production guard,
+not a compiler failure.
 
 Run a focused test file with:
 
 ```bash
-bun test tests/permissions.test.ts
+bun test tests/auth-url.test.ts
 ```
 
-The focused domain suite is:
+The complete focused authentication suite is:
 
 ```bash
-bun test tests/business-domain.test.ts
+bun test tests/auth-url.test.ts tests/auth-config.test.ts tests/auth-access.test.ts tests/auth-routing.test.ts
 ```
 
 ## Database verification
@@ -52,18 +78,16 @@ Run `db:generate` before `db:migrate` when a Drizzle schema changed, inspect the
 
 The current pure unit suite covers:
 
-- Role normalization and route/permission policy.
-- Employee-resource scope decisions, including payroll isolation.
-- Manager team scope without organization-wide payroll permission.
-- HR and administrator management boundaries.
-- The Better Auth `account.issuer` schema mapping required by the installed adapter.
-- Post-authentication routing for known and unknown roles.
-- Attendance transition and duration rules.
-- Employee-manager self/cycle validation.
-- Leave date, scheduled-workday/holiday duration, overlap, balance, actor scope, and decision rules.
-- Exact-cent payroll parsing/formatting, server-derived net pay, and invalid deduction rejection.
+- Canonical Better Auth URL normalization and priority.
+- Production rejection of missing, HTTP, or loopback auth origins.
+- Exact custom, Vercel production, branch, and deployment origins.
+- Rejection of universal, broad Vercel, insecure, and scheme-less production wildcards.
+- Request-host allowlist derivation.
+- Valid-session, linked-employee, and active-employment access states.
+- Safe same-application OAuth callback paths and open-redirect rejection.
+- Better Auth handler uniqueness and `/api/auth` namespace ownership.
 
-These are pure-function and schema-shape tests. They do not issue HTTP requests or SQL and therefore do not prove route-handler guards, foreign keys, generated migration compatibility, transaction rollback, or concurrent uniqueness.
+These are pure-function and static routing tests. They do not issue authenticated HTTP requests or SQL and therefore do not prove route-handler guards, foreign keys, generated migration compatibility, transaction rollback, or concurrent uniqueness.
 
 Database route handlers should additionally be exercised against a disposable branch for:
 
@@ -97,4 +121,10 @@ Use separate employee, manager, HR, and administrator development accounts.
 
 ## Release gate
 
-A release candidate is ready for database staging only when all four non-mutating commands exit successfully and generated migration SQL has been reviewed. Production release additionally requires the disposable-database workflow checks above, representative-data migration validation, and closure of the known limitations in `README.md` and `IMPLEMENTATION_PLAN.md`. Warnings must be resolved rather than hidden with `any`, `@ts-ignore`, disabled lint rules, or fake responses.
+A release candidate is ready for database staging only when lint, typecheck,
+tests, and a production-configured build exit successfully and generated
+migration SQL has been reviewed. Production release additionally requires the
+disposable-database workflow checks above, representative-data migration
+validation, and closure of the known limitations in `README.md` and
+`IMPLEMENTATION_PLAN.md`. Warnings must be resolved rather than hidden with
+`any`, `@ts-ignore`, disabled lint rules, or fake responses.

@@ -5,20 +5,25 @@ import { after } from "next/server";
 import { db } from "@/db";
 import { employees } from "@/db/schema/employees";
 import * as schema from "@/db/schema/auth-schema";
-import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email/service";
+import {
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+} from "@/lib/email/service";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { serverEnv } from "@/lib/env";
-import { resolveTrustedOrigins } from "@/lib/auth/url";
+import {
+  resolveAllowedAuthHosts,
+  resolveTrustedOrigins,
+} from "@/lib/auth/url";
+import {
+  classifyAuthFailure,
+  logAuthDiagnostic,
+  logBetterAuthMessage,
+} from "@/lib/auth/diagnostics";
 
 const isProduction = process.env.NODE_ENV === "production";
 const authSecret = serverEnv.BETTER_AUTH_SECRET;
-
-if (isProduction && (!authSecret || authSecret.length < 32)) {
-  throw new Error(
-    "BETTER_AUTH_SECRET is required in production and must contain at least 32 high-entropy characters.",
-  );
-}
 
 function readBooleanSetting(
   value: string | undefined,
@@ -31,7 +36,9 @@ function readBooleanSetting(
   if (["1", "true", "yes", "on"].includes(normalized)) return true;
   if (["0", "false", "no", "off"].includes(normalized)) return false;
 
-  throw new Error(`${name} must be a boolean value.`);
+  throw new Error(
+    `AUTH_CONFIGURATION_ERROR: ${name} must be a boolean value.`,
+  );
 }
 
 const requireEmailVerification = readBooleanSetting(
@@ -40,16 +47,98 @@ const requireEmailVerification = readBooleanSetting(
   "AUTH_REQUIRE_EMAIL_VERIFICATION",
 );
 
-const baseURL = serverEnv.BETTER_AUTH_URL;
+if (isProduction && !requireEmailVerification) {
+  throw new Error(
+    "AUTH_CONFIGURATION_ERROR: AUTH_REQUIRE_EMAIL_VERIFICATION must be enabled in production.",
+  );
+}
+
 const trustedOrigins = resolveTrustedOrigins();
+const allowedHosts = resolveAllowedAuthHosts();
+const trustProxyHeaders = readBooleanSetting(
+  process.env.AUTH_TRUST_PROXY_HEADERS,
+  process.env.VERCEL === "1",
+  "AUTH_TRUST_PROXY_HEADERS",
+);
+
+// Better Auth 1.7 resolves only explicitly allowlisted request hosts. This is
+// what keeps a preview/custom-domain OAuth state cookie and its callback on the
+// same host. The canonical URL is still resolved once in lib/env.ts and is
+// always included in the allowlist.
+const baseURL = {
+  allowedHosts,
+  protocol: isProduction ? ("https" as const) : ("auto" as const),
+};
 
 const githubClientId = process.env.GITHUB_CLIENT_ID?.trim() || undefined;
 const githubClientSecret = process.env.GITHUB_CLIENT_SECRET?.trim() || undefined;
+const githubOAuthRequired =
+  isProduction && process.env.VERCEL_ENV !== "preview";
 
 if (Boolean(githubClientId) !== Boolean(githubClientSecret)) {
   throw new Error(
-    "GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must either both be configured or both be omitted.",
+    "AUTH_CONFIGURATION_ERROR: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must either both be configured or both be omitted.",
   );
+}
+
+if (githubOAuthRequired && (!githubClientId || !githubClientSecret)) {
+  throw new Error(
+    "AUTH_CONFIGURATION_ERROR: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required for the production Dayflow deployment.",
+  );
+}
+
+const emailProviderUrl = process.env.EMAIL_PROVIDER_API_URL?.trim();
+const emailProviderKey = process.env.EMAIL_PROVIDER_API_KEY?.trim();
+const emailFrom = process.env.EMAIL_FROM?.trim();
+
+if (Boolean(emailProviderUrl) !== Boolean(emailProviderKey)) {
+  throw new Error(
+    "AUTH_CONFIGURATION_ERROR: EMAIL_PROVIDER_API_URL and EMAIL_PROVIDER_API_KEY must either both be configured or both be omitted.",
+  );
+}
+
+if (emailProviderUrl) {
+  try {
+    const parsedEmailProviderUrl = new URL(emailProviderUrl);
+    if (
+      !["http:", "https:"].includes(parsedEmailProviderUrl.protocol) ||
+      parsedEmailProviderUrl.username ||
+      parsedEmailProviderUrl.password ||
+      (isProduction && parsedEmailProviderUrl.protocol !== "https:")
+    ) {
+      throw new Error("invalid email provider URL");
+    }
+  } catch {
+    throw new Error(
+      "AUTH_CONFIGURATION_ERROR: EMAIL_PROVIDER_API_URL must be a valid HTTPS URL in production.",
+    );
+  }
+}
+
+if (
+  isProduction &&
+  requireEmailVerification &&
+  (!emailProviderUrl || !emailProviderKey || !emailFrom)
+) {
+  throw new Error(
+    "AUTH_CONFIGURATION_ERROR: Email verification is enabled, so EMAIL_PROVIDER_API_URL, EMAIL_PROVIDER_API_KEY, and EMAIL_FROM are required in production.",
+  );
+}
+
+function scheduleAuthEmail(
+  stage: "password-reset" | "verification",
+  send: () => Promise<unknown>,
+): void {
+  after(async () => {
+    try {
+      await send();
+    } catch (error) {
+      logAuthDiagnostic("AUTH_EMAIL_ERROR", {
+        stage,
+        error,
+      });
+    }
+  });
 }
 
 export const auth = betterAuth({
@@ -71,7 +160,9 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 30,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      after(() => sendPasswordResetEmail(user.email, url, user.name));
+      scheduleAuthEmail("password-reset", () =>
+        sendPasswordResetEmail(user.email, url, user.name),
+      );
     },
   },
   emailVerification: {
@@ -80,7 +171,9 @@ export const auth = betterAuth({
     autoSignInAfterVerification: true,
     expiresIn: 60 * 60,
     sendVerificationEmail: async ({ user, url }) => {
-      after(() => sendVerificationEmail(user.email, url, user.name));
+      scheduleAuthEmail("verification", () =>
+        sendVerificationEmail(user.email, url, user.name),
+      );
     },
   },
   user: {
@@ -107,6 +200,11 @@ export const auth = betterAuth({
 
       const email = typeof user.email === "string" ? user.email.toLowerCase().trim() : "";
       if (!email) {
+        logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
+          level: "warn",
+          stage: "validate-user-email",
+          errorCode: "EMAIL_REQUIRED",
+        });
         return {
           error: "EMAIL_REQUIRED",
           errorDescription: "A valid email address is required.",
@@ -123,6 +221,11 @@ export const auth = betterAuth({
       ];
       if (source.method === "email-password") {
         if (!employeeNumber) {
+          logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
+            level: "warn",
+            stage: "validate-employee-number",
+            errorCode: "EMPLOYEE_ID_REQUIRED",
+          });
           return {
             error: "EMPLOYEE_ID_REQUIRED",
             errorDescription: "A valid pre-issued employee ID is required.",
@@ -138,12 +241,23 @@ export const auth = betterAuth({
         .limit(1);
       if (!eligibleEmployee) {
         if (source.method === "oauth") {
+          logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
+            level: "warn",
+            stage: "validate-oauth-employee",
+            provider: "github",
+            errorCode: "NO_MATCHING_EMPLOYEE",
+          });
           return {
             error: "NO_MATCHING_EMPLOYEE",
             errorDescription:
-              `No pre-registered employee profile found for this GitHub account email (${email}). Please contact HR.`,
+              "No pre-registered employee profile was found for this GitHub account. Please contact HR.",
           };
         }
+        logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
+          level: "warn",
+          stage: "validate-credential-employee",
+          errorCode: "EMPLOYEE_ID_MISMATCH",
+        });
         return {
           error: "EMPLOYEE_ID_MISMATCH",
           errorDescription:
@@ -185,7 +299,6 @@ export const auth = betterAuth({
     storeStateStrategy: "cookie",
     accountLinking: {
       enabled: true,
-      trustedProviders: ["github"],
     },
   },
   session: {
@@ -208,7 +321,7 @@ export const auth = betterAuth({
   },
   advanced: {
     useSecureCookies: isProduction,
-    trustedProxyHeaders: true,
+    trustedProxyHeaders: trustProxyHeaders,
     disableCSRFCheck: false,
     disableOriginCheck: false,
     defaultCookieAttributes: {
@@ -217,7 +330,20 @@ export const auth = betterAuth({
       path: "/",
     },
   },
+  logger: {
+    disableColors: true,
+    level: isProduction ? "warn" : "info",
+    log: (level, message) => logBetterAuthMessage(level, message),
+  },
+  onAPIError: {
+    onError: (error) => {
+      logAuthDiagnostic(classifyAuthFailure(error), {
+        stage: "api-handler",
+        error,
+      });
+    },
+  },
   ...(authSecret ? { secret: authSecret } : {}),
-  ...(baseURL ? { baseURL } : {}),
+  baseURL,
   trustedOrigins,
 });

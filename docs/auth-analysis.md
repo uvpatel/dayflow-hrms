@@ -1,7 +1,13 @@
 # Dayflow HRMS — Authentication & Authorization Audit and Analysis
 
+> **Historical document — superseded.** This file describes the repository
+> before the authentication/RBAC refactor and contains statements that are no
+> longer true (including duplicate handlers and the Next.js 16 `proxy.ts`
+> convention). Do not use it for deployment. See
+> [AUTH_PRODUCTION.md](./AUTH_PRODUCTION.md) for the current audited contract.
+
 **Date:** 2026-08-22  
-**Status:** Audit Complete  
+**Status:** Superseded historical audit
 **Application:** Dayflow HRMS ("Every workday, perfectly aligned.")  
 **Installed Better Auth Version:** `1.7.1`  
 **Framework:** Next.js `16.3.1` (Turbopack, App Router) with React `19.2.8`  

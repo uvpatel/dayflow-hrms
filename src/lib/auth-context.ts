@@ -17,6 +17,10 @@ import {
   getAuthAccessIssue,
 } from "@/lib/auth/access";
 import { synchronizeAuthUserRole } from "@/lib/auth/roles";
+import {
+  classifyAuthFailure,
+  logAuthDiagnostic,
+} from "@/lib/auth/diagnostics";
 
 type InferredSession = typeof auth.$Infer.Session;
 export type BetterAuthUser = InferredSession["user"];
@@ -114,9 +118,23 @@ export async function getAuthContext(
   requestHeaders?: Headers,
 ): Promise<AuthContext | null> {
   const reqHeaders = requestHeaders ?? (await headers());
-  const sessionRes = await auth.api.getSession({
-    headers: reqHeaders,
-  });
+  const sessionRes = await (async () => {
+    try {
+      return await auth.api.getSession({
+        headers: reqHeaders,
+      });
+    } catch (error) {
+      const classified = classifyAuthFailure(error);
+      logAuthDiagnostic(
+        classified === "AUTH_API_ERROR" ? "AUTH_SESSION_ERROR" : classified,
+        {
+          stage: "get-session",
+          error,
+        },
+      );
+      throw error;
+    }
+  })();
 
   if (!sessionRes?.user) {
     return null;
@@ -125,7 +143,22 @@ export async function getAuthContext(
   const authUser = sessionRes.user;
   const authSession = sessionRes.session;
 
-  const employee = await resolveEmployee(authUser);
+  let employee: Employee | null;
+  try {
+    employee = await resolveEmployee(authUser);
+  } catch (error) {
+    const classified = classifyAuthFailure(error);
+    logAuthDiagnostic(
+      classified === "AUTH_API_ERROR"
+        ? "AUTH_EMPLOYEE_LINK_ERROR"
+        : classified,
+      {
+        stage: "resolve-employee",
+        error,
+      },
+    );
+    throw error;
+  }
 
   // The linked employee record is the authorization source of truth. Better
   // Auth's user role is deliberately not used as a fallback because the two

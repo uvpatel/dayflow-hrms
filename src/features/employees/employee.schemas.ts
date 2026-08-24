@@ -25,7 +25,12 @@ export const createEmployeeSchema = z.object({
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
   email: z.string().email("Valid email address is required").transform((value) => value.trim().toLowerCase()),
   phoneNumber: z.string().min(5, "Valid phone number is required").optional(),
-  employeeNumber: z.string().trim().min(1).optional(),
+  employeeNumber: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((value) => value.toUpperCase())
+    .optional(),
   departmentId: z.number().int().positive().optional().nullable(),
   designationId: z.number().int().positive().optional().nullable(),
   managerId: z.number().int().positive().optional().nullable(),

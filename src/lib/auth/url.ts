@@ -1,132 +1,221 @@
 /**
- * URL normalization and resolution utilities for Better Auth.
- * Handles production edge cases including missing protocols, trailing slashes,
- * whitespace/quotes, wildcard origins (e.g. Vercel preview deploys),
- * and platform environment variables (Vercel, custom domains, localhost).
+ * Canonical URL and trusted-origin resolution for Better Auth.
+ *
+ * Server code must use one canonical origin. Browser code intentionally does
+ * not import this module; it calls the same-origin `/api/auth` endpoint.
  */
 
-export function normalizeAuthOrigin(value?: string | null): string | undefined {
+export type AuthUrlEnvironment = {
+  BETTER_AUTH_URL?: string;
+  BETTER_AUTH_TRUSTED_ORIGINS?: string;
+  NODE_ENV?: string;
+  VERCEL_BRANCH_URL?: string;
+  VERCEL_PROJECT_PRODUCTION_URL?: string;
+  VERCEL_URL?: string;
+};
+
+function unwrapEnvironmentValue(value?: string | null): string | undefined {
   if (value == null) return undefined;
-  let trimmed = value.trim();
-  if (!trimmed) return undefined;
 
-  // Remove surrounding single or double quotes
+  let result = value.trim();
+  if (!result) return undefined;
+
   if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    (result.startsWith('"') && result.endsWith('"')) ||
+    (result.startsWith("'") && result.endsWith("'"))
   ) {
-    trimmed = trimmed.slice(1, -1).trim();
-  }
-  if (!trimmed) return undefined;
-
-  // If already starts with a protocol
-  if (/^https?:\/\//i.test(trimmed)) {
-    try {
-      const url = new URL(trimmed);
-      return url.origin;
-    } catch {
-      return undefined;
-    }
+    result = result.slice(1, -1).trim();
   }
 
-  // Infer protocol: http for localhost/127.0.0.1 loopback, https for domains
-  const isLoopback =
-    trimmed.startsWith("localhost") ||
-    trimmed.startsWith("127.0.0.1") ||
-    trimmed.startsWith("[::1]");
-  const scheme = isLoopback ? "http://" : "https://";
+  return result || undefined;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\.+$/, "");
+  const unbracketed = normalized.replace(/^\[|\]$/g, "");
+  return (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    /^127(?:\.\d{1,3}){3}$/.test(normalized) ||
+    unbracketed === "::1" ||
+    unbracketed.startsWith("::ffff:127.") ||
+    /^::ffff:7f[\da-f]{2}:/.test(unbracketed)
+  );
+}
+
+export function normalizeAuthOrigin(value?: string | null): string | undefined {
+  const unwrapped = unwrapEnvironmentValue(value);
+  if (!unwrapped) return undefined;
+
+  const explicitScheme = /^([a-z][a-z\d+.-]*):\/\//i.exec(unwrapped)?.[1];
+  if (explicitScheme && !/^https?$/i.test(explicitScheme)) return undefined;
 
   try {
-    const url = new URL(`${scheme}${trimmed}`);
+    const url = new URL(explicitScheme ? unwrapped : `https://${unwrapped}`);
+
+    if (!["http:", "https:"].includes(url.protocol)) return undefined;
+    if (url.username || url.password) return undefined;
+    if (url.hostname.includes("*") || url.hostname.includes("?")) {
+      return undefined;
+    }
+
+    if (!explicitScheme && isLoopbackHostname(url.hostname)) {
+      url.protocol = "http:";
+    }
+
     return url.origin;
   } catch {
     return undefined;
   }
 }
 
-export function resolveCanonicalAuthUrl(): string | undefined {
-  // 1. Explicit BETTER_AUTH_URL
-  const fromAuthUrl = normalizeAuthOrigin(process.env.BETTER_AUTH_URL);
-  if (fromAuthUrl) return fromAuthUrl;
+export function isSecureProductionAuthOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === "https:" && !isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
 
-  // 2. Vercel project production domain
-  const fromVercelProd = normalizeAuthOrigin(
-    process.env.VERCEL_PROJECT_PRODUCTION_URL,
-  );
-  if (fromVercelProd) return fromVercelProd;
+export function resolveCanonicalAuthUrl(
+  environment: AuthUrlEnvironment = process.env,
+): string | undefined {
+  const candidates = [
+    environment.BETTER_AUTH_URL,
+    environment.VERCEL_PROJECT_PRODUCTION_URL,
+    environment.VERCEL_URL,
+  ];
 
-  // 3. Vercel deployment URL
-  const fromVercelUrl = normalizeAuthOrigin(process.env.VERCEL_URL);
-  if (fromVercelUrl) return fromVercelUrl;
+  for (const candidate of candidates) {
+    const normalized = normalizeAuthOrigin(candidate);
+    if (normalized) return normalized;
+  }
 
-  // 4. In development / non-production, fallback to localhost:3000
-  if (process.env.NODE_ENV !== "production") {
+  if (environment.NODE_ENV !== "production") {
     return "http://localhost:3000";
   }
 
   return undefined;
 }
 
-export function resolveTrustedOrigins(): string[] {
+function normalizeTrustedOriginPattern(
+  value: string,
+  allowHttp: boolean,
+): string | undefined {
+  const unwrapped = unwrapEnvironmentValue(value);
+  if (!unwrapped) return undefined;
+
+  // Better Auth 1.7 also reads BETTER_AUTH_TRUSTED_ORIGINS directly. In
+  // production, requiring the scheme on the raw value prevents a scheme-less
+  // wildcard from silently matching both HTTP and HTTPS.
+  if (!allowHttp && !/^https:\/\//i.test(unwrapped)) return undefined;
+  if (unwrapped.includes("?")) return undefined;
+
+  if (!unwrapped.includes("*")) {
+    const normalized = normalizeAuthOrigin(unwrapped);
+    if (!normalized) return undefined;
+    if (!allowHttp && !isSecureProductionAuthOrigin(normalized)) return undefined;
+    return normalized;
+  }
+
+  // Better Auth 1.7 supports wildcard origins. Keep configured wildcards
+  // protocol-specific and scoped to a real parent domain; never accept `*`.
+  const withProtocol = /^https?:\/\//i.test(unwrapped)
+    ? unwrapped
+    : `https://${unwrapped}`;
+
+  try {
+    const url = new URL(withProtocol);
+    const concreteLabels = url.hostname
+      .split(".")
+      .filter((label) => label && !label.includes("*"));
+
+    if (url.username || url.password) return undefined;
+    if (url.pathname !== "/" || url.search || url.hash) return undefined;
+    if (!["http:", "https:"].includes(url.protocol)) return undefined;
+    if (!allowHttp && url.protocol !== "https:") return undefined;
+    if (!/^[a-z\d.*-]+$/i.test(url.hostname)) return undefined;
+    if (concreteLabels.length < 2) return undefined;
+
+    // A project-specific pattern such as dayflow-*.vercel.app is supported,
+    // but trusting every Vercel tenant would turn another tenant into a valid
+    // callback/origin source.
+    if (/^\*+\.vercel\.app$/i.test(url.hostname)) return undefined;
+
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
+export function resolveTrustedOrigins(
+  environment: AuthUrlEnvironment = process.env,
+): string[] {
   const origins = new Set<string>();
+  const isProduction = environment.NODE_ENV === "production";
 
-  // 1. Always include standard local development / test origins
-  origins.add("http://localhost:3000");
-  origins.add("http://127.0.0.1:3000");
-  origins.add("http://localhost:3001");
-
-  // 2. Add canonical baseURL if resolved
-  const canonicalUrl = resolveCanonicalAuthUrl();
-  if (canonicalUrl) {
-    origins.add(canonicalUrl);
+  if (!isProduction) {
+    origins.add("http://localhost:3000");
+    origins.add("http://127.0.0.1:3000");
+    origins.add("http://localhost:3001");
   }
 
-  // 3. Add Vercel system environment origins if present
-  const vercelProd = normalizeAuthOrigin(
-    process.env.VERCEL_PROJECT_PRODUCTION_URL,
-  );
-  if (vercelProd) origins.add(vercelProd);
+  const canonicalAuthUrl = resolveCanonicalAuthUrl(environment);
+  if (canonicalAuthUrl) origins.add(canonicalAuthUrl);
 
-  const vercelUrl = normalizeAuthOrigin(process.env.VERCEL_URL);
-  if (vercelUrl) origins.add(vercelUrl);
+  for (const candidate of [
+    environment.VERCEL_PROJECT_PRODUCTION_URL,
+    environment.VERCEL_BRANCH_URL,
+    environment.VERCEL_URL,
+  ]) {
+    if (!unwrapEnvironmentValue(candidate)) continue;
 
-  // 4. Always trust Vercel preview wildcard patterns
-  origins.add("*.vercel.app");
-  origins.add("https://*.vercel.app");
-
-  // 5. Parse BETTER_AUTH_TRUSTED_ORIGINS
-  const rawTrustedOrigins = process.env.BETTER_AUTH_TRUSTED_ORIGINS;
-  if (rawTrustedOrigins) {
-    const candidates = rawTrustedOrigins.split(",");
-    for (const raw of candidates) {
-      let candidate = raw.trim();
-      if (!candidate) continue;
-
-      if (
-        (candidate.startsWith('"') && candidate.endsWith('"')) ||
-        (candidate.startsWith("'") && candidate.endsWith("'"))
-      ) {
-        candidate = candidate.slice(1, -1).trim();
-      }
-      if (!candidate) continue;
-
-      // Handle wildcard patterns (e.g. *.example.com or https://*.example.com)
-      if (candidate.includes("*")) {
-        origins.add(candidate);
-        if (
-          !candidate.startsWith("http://") &&
-          !candidate.startsWith("https://")
-        ) {
-          origins.add(`https://${candidate}`);
-        }
-      } else {
-        const normalized = normalizeAuthOrigin(candidate);
-        if (normalized) {
-          origins.add(normalized);
-        }
-      }
+    const normalized = normalizeAuthOrigin(candidate);
+    if (
+      !normalized ||
+      (isProduction && !isSecureProductionAuthOrigin(normalized))
+    ) {
+      throw new Error(
+        "AUTH_CONFIGURATION_ERROR: A Vercel deployment URL is invalid or insecure.",
+      );
     }
+    origins.add(normalized);
   }
 
-  return Array.from(origins);
+  const configuredOrigins =
+    environment.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [];
+  for (const configuredOrigin of configuredOrigins) {
+    if (!configuredOrigin.trim()) continue;
+
+    const normalized = normalizeTrustedOriginPattern(
+      configuredOrigin,
+      !isProduction,
+    );
+    if (!normalized) {
+      throw new Error(
+        "AUTH_CONFIGURATION_ERROR: BETTER_AUTH_TRUSTED_ORIGINS contains an invalid or insecure origin.",
+      );
+    }
+    origins.add(normalized);
+  }
+
+  return [...origins];
+}
+
+/**
+ * Better Auth 1.7 can resolve its URL from the request, but only after the
+ * request host matches this allowlist. This keeps OAuth callbacks and
+ * host-only state cookies on the same explicitly trusted deployment host.
+ */
+export function resolveAllowedAuthHosts(
+  environment: AuthUrlEnvironment = process.env,
+): string[] {
+  return resolveTrustedOrigins(environment).map((origin) => {
+    if (origin.includes("*") || origin.includes("?")) {
+      return origin.replace(/^https?:\/\//i, "").split("/")[0]!.toLowerCase();
+    }
+
+    return new URL(origin).host.toLowerCase();
+  });
 }
