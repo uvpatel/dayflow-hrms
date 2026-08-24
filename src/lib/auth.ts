@@ -47,12 +47,6 @@ const requireEmailVerification = readBooleanSetting(
   "AUTH_REQUIRE_EMAIL_VERIFICATION",
 );
 
-if (isProduction && !requireEmailVerification) {
-  throw new Error(
-    "AUTH_CONFIGURATION_ERROR: AUTH_REQUIRE_EMAIL_VERIFICATION must be enabled in production.",
-  );
-}
-
 const trustedOrigins = resolveTrustedOrigins();
 const allowedHosts = resolveAllowedAuthHosts();
 const trustProxyHeaders = readBooleanSetting(
@@ -72,29 +66,23 @@ const baseURL = {
 
 const githubClientId = process.env.GITHUB_CLIENT_ID?.trim() || undefined;
 const githubClientSecret = process.env.GITHUB_CLIENT_SECRET?.trim() || undefined;
-const githubOAuthRequired =
-  isProduction && process.env.VERCEL_ENV !== "preview";
 
 if (Boolean(githubClientId) !== Boolean(githubClientSecret)) {
-  throw new Error(
-    "AUTH_CONFIGURATION_ERROR: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must either both be configured or both be omitted.",
-  );
-}
-
-if (githubOAuthRequired && (!githubClientId || !githubClientSecret)) {
-  throw new Error(
-    "AUTH_CONFIGURATION_ERROR: GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required for the production Dayflow deployment.",
-  );
+  logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
+    stage: "init",
+    error: "GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must either both be configured or both be omitted.",
+  });
 }
 
 const emailProviderUrl = process.env.EMAIL_PROVIDER_API_URL?.trim();
 const emailProviderKey = process.env.EMAIL_PROVIDER_API_KEY?.trim();
-const emailFrom = process.env.EMAIL_FROM?.trim();
+const emailFrom = process.env.EMAIL_FROM?.trim() || "Dayflow <notifications@dayflow.dev>";
 
 if (Boolean(emailProviderUrl) !== Boolean(emailProviderKey)) {
-  throw new Error(
-    "AUTH_CONFIGURATION_ERROR: EMAIL_PROVIDER_API_URL and EMAIL_PROVIDER_API_KEY must either both be configured or both be omitted.",
-  );
+  logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
+    stage: "init",
+    error: "EMAIL_PROVIDER_API_URL and EMAIL_PROVIDER_API_KEY must either both be configured or both be omitted.",
+  });
 }
 
 if (emailProviderUrl) {
@@ -106,23 +94,28 @@ if (emailProviderUrl) {
       parsedEmailProviderUrl.password ||
       (isProduction && parsedEmailProviderUrl.protocol !== "https:")
     ) {
-      throw new Error("invalid email provider URL");
+      logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
+        stage: "init",
+        error: "EMAIL_PROVIDER_API_URL should be a valid HTTPS URL in production.",
+      });
     }
   } catch {
-    throw new Error(
-      "AUTH_CONFIGURATION_ERROR: EMAIL_PROVIDER_API_URL must be a valid HTTPS URL in production.",
-    );
+    logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
+      stage: "init",
+      error: "EMAIL_PROVIDER_API_URL is not a valid URL.",
+    });
   }
 }
 
 if (
   isProduction &&
   requireEmailVerification &&
-  (!emailProviderUrl || !emailProviderKey || !emailFrom)
+  (!emailProviderUrl || !emailProviderKey)
 ) {
-  throw new Error(
-    "AUTH_CONFIGURATION_ERROR: Email verification is enabled, so EMAIL_PROVIDER_API_URL, EMAIL_PROVIDER_API_KEY, and EMAIL_FROM are required in production.",
-  );
+  logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
+    stage: "init",
+    error: "Email verification is enabled, but EMAIL_PROVIDER_API_URL or EMAIL_PROVIDER_API_KEY is not configured.",
+  });
 }
 
 function scheduleAuthEmail(

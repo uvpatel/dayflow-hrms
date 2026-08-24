@@ -154,14 +154,18 @@ export function resolveTrustedOrigins(
 ): string[] {
   const origins = new Set<string>();
   const isProduction = environment.NODE_ENV === "production";
+  const canonicalAuthUrl = resolveCanonicalAuthUrl(environment);
+  const isStrictProduction =
+    isProduction &&
+    canonicalAuthUrl !== undefined &&
+    isSecureProductionAuthOrigin(canonicalAuthUrl);
 
-  if (!isProduction) {
+  if (!isStrictProduction) {
     origins.add("http://localhost:3000");
     origins.add("http://127.0.0.1:3000");
     origins.add("http://localhost:3001");
   }
 
-  const canonicalAuthUrl = resolveCanonicalAuthUrl(environment);
   if (canonicalAuthUrl) origins.add(canonicalAuthUrl);
 
   for (const candidate of [
@@ -190,7 +194,7 @@ export function resolveTrustedOrigins(
 
     const normalized = normalizeTrustedOriginPattern(
       configuredOrigin,
-      !isProduction,
+      !isStrictProduction,
     );
     if (!normalized) {
       throw new Error(

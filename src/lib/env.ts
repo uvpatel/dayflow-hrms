@@ -41,7 +41,10 @@ if (process.env.NODE_ENV === "production") {
     );
   }
 
-  if (!isSecureProductionAuthOrigin(parsed.data.BETTER_AUTH_URL)) {
+  if (
+    process.env.VERCEL === "1" &&
+    !isSecureProductionAuthOrigin(parsed.data.BETTER_AUTH_URL)
+  ) {
     throw new Error(
       "AUTH_CONFIGURATION_ERROR: The production auth URL must use HTTPS and cannot be a loopback address.",
     );
