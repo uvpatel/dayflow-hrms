@@ -1,4 +1,11 @@
-export const APP_ROLES = ["admin", "hr", "manager", "employee"] as const;
+export const ROLES = {
+  ADMIN: "admin",
+  HR: "hr",
+  MANAGER: "manager",
+  EMPLOYEE: "employee",
+} as const;
+
+export const APP_ROLES = Object.values(ROLES);
 
 export type Role = (typeof APP_ROLES)[number];
 
@@ -263,6 +270,8 @@ export const PAGE_ROUTE_POLICIES: readonly RoutePolicy[] = [
   { path: "/dashboard/payroll/salary-structures", roles: HR_ROLES },
   { path: "/dashboard/payroll", roles: ALL_ROLES },
   { path: "/dashboard/organization/departments", roles: HR_ROLES },
+  { path: "/dashboard/organization/designations", roles: HR_ROLES },
+  { path: "/dashboard/organization/locations", roles: HR_ROLES },
   { path: "/dashboard/organization/holidays", roles: ALL_ROLES },
   { path: "/dashboard/reports", roles: MANAGEMENT_ROLES },
   { path: "/dashboard/audit-logs", roles: HR_ROLES },

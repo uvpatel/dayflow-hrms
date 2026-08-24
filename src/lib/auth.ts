@@ -8,52 +8,15 @@ import * as schema from "@/db/schema/auth-schema";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email/service";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
+import { serverEnv } from "@/lib/env";
 
 const isProduction = process.env.NODE_ENV === "production";
-const authSecret = process.env.BETTER_AUTH_SECRET || process.env.AUTH_SECRET;
-
-function resolveBaseURL(): string {
-  const explicit =
-    process.env.BETTER_AUTH_URL ||
-    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
-    process.env.APP_URL ||
-    process.env.NEXT_PUBLIC_APP_URL;
-
-  if (explicit?.trim()) {
-    const trimmed = explicit.trim();
-    const url = new URL(
-      trimmed.startsWith("http://") || trimmed.startsWith("https://")
-        ? trimmed
-        : `https://${trimmed}`,
-    );
-    return url.origin;
-  }
-
-  const vercelHost =
-    process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
-  if (vercelHost?.trim()) {
-    const trimmed = vercelHost.trim();
-    const url = new URL(
-      trimmed.startsWith("http://") || trimmed.startsWith("https://")
-        ? trimmed
-        : `https://${trimmed}`,
-    );
-    return url.origin;
-  }
-
-  return isProduction ? "" : "http://localhost:3000";
-}
-
-const configuredBaseURL = resolveBaseURL();
+const authSecret = serverEnv.BETTER_AUTH_SECRET;
 
 if (isProduction && (!authSecret || authSecret.length < 32)) {
   throw new Error(
     "BETTER_AUTH_SECRET is required in production and must contain at least 32 high-entropy characters.",
   );
-}
-
-if (isProduction && !configuredBaseURL) {
-  throw new Error("BETTER_AUTH_URL is required in production.");
 }
 
 function readBooleanSetting(
@@ -76,7 +39,7 @@ const requireEmailVerification = readBooleanSetting(
   "AUTH_REQUIRE_EMAIL_VERIFICATION",
 );
 
-const baseURL = configuredBaseURL || "http://localhost:3000";
+const baseURL = serverEnv.BETTER_AUTH_URL;
 const trustedOrigins = new Set<string>();
 
 for (const candidate of [

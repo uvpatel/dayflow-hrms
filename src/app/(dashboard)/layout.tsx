@@ -16,7 +16,7 @@ export default async function DashboardLayout({
 
   const pathname = requestHeaders.get("x-dayflow-pathname") ?? "/dashboard";
   if (!canAccessPage(context.role, pathname)) {
-    redirect("/dashboard");
+    redirect("/auth/access-denied?reason=insufficient_permission");
   }
 
   return (

@@ -32,6 +32,18 @@ export interface PaginatedData<T> {
   totalPages?: number;
 }
 
+export class ApiClientError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = "ApiClientError";
+  }
+}
+
 /**
  * Supports both the canonical `{ data: T[], meta }` envelope and the older
  * `{ data: { items, total } }` envelope while routes are being consolidated.
@@ -87,15 +99,33 @@ export async function apiClient<T>(
       typeof errorPayload === "string"
         ? errorPayload
         : errorPayload?.message || `Request failed with status ${res.status}`;
-    const error = new Error(errorMsg);
-    (error as Error & { code?: string; details?: unknown; status?: number }).code =
-      json.code || (typeof errorPayload === "object" ? errorPayload?.code : undefined);
-    (error as Error & { code?: string; details?: unknown; status?: number }).details =
+    throw new ApiClientError(
+      errorMsg,
+      res.status,
+      json.code || (typeof errorPayload === "object" ? errorPayload?.code : undefined),
       json.details ??
-      (typeof errorPayload === "object" ? errorPayload?.fields : undefined);
-    (error as Error & { code?: string; details?: unknown; status?: number }).status = res.status;
-    throw error;
+        (typeof errorPayload === "object" ? errorPayload?.fields : undefined),
+    );
   }
 
   return json;
 }
+
+type JsonRequestOptions = Omit<RequestInit, "body" | "method">;
+
+function withJsonBody(body: unknown, options?: JsonRequestOptions): RequestInit {
+  return { ...options, body: body === undefined ? undefined : JSON.stringify(body) };
+}
+
+export const api = {
+  get: <T>(url: string, options?: JsonRequestOptions) =>
+    apiClient<T>(url, { ...options, method: "GET" }),
+  post: <T>(url: string, body?: unknown, options?: JsonRequestOptions) =>
+    apiClient<T>(url, { ...withJsonBody(body, options), method: "POST" }),
+  put: <T>(url: string, body?: unknown, options?: JsonRequestOptions) =>
+    apiClient<T>(url, { ...withJsonBody(body, options), method: "PUT" }),
+  patch: <T>(url: string, body?: unknown, options?: JsonRequestOptions) =>
+    apiClient<T>(url, { ...withJsonBody(body, options), method: "PATCH" }),
+  delete: <T>(url: string, options?: JsonRequestOptions) =>
+    apiClient<T>(url, { ...options, method: "DELETE" }),
+};
