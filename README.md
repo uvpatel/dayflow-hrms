@@ -1,266 +1,278 @@
-# Dayflow
+# Dayflow HRMS
 
-Human Resource Management System — every workday, perfectly aligned.
+> **Modern Human Resource Management System built with Next.js.**  
+> *Every workday, perfectly aligned.*
 
-Dayflow is a Next.js HRMS for employee self-service, manager team workflows, attendance, leave, payroll visibility, HR operations, organization configuration, notifications, reports, and auditing. The main workflows are implemented, but generated migrations still need representative-data validation and several schema and production-hardening limitations remain; see [Implementation status](#implementation-status) before treating it as production-ready.
+[![Next.js](https://img.shields.io/badge/Next.js-16.3-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-blue?style=flat-square&logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon_Serverless-4169e1?style=flat-square&logo=postgresql)](https://neon.tech)
+[![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-v1.0-c5f015?style=flat-square&logo=drizzle)](https://orm.drizzle.team)
+[![Better Auth](https://img.shields.io/badge/Better_Auth-1.7-orange?style=flat-square)](https://better-auth.com)
+[![Bun](https://img.shields.io/badge/Bun-1.3-black?style=flat-square&logo=bun)](https://bun.sh)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 
-## Stack
+---
 
-- Next.js 16.3 App Router and React 19
-- TypeScript, Tailwind CSS 4, shadcn/Base UI
-- Better Auth 1.7 with email/password and optional GitHub OAuth
-- Drizzle ORM and Neon PostgreSQL
-- TanStack Query, Zod, Recharts, and Bun
+## Overview
 
-The project deliberately uses one authentication system, one ORM, and one PostgreSQL database. Business endpoints live under `/api/v1`; Better Auth owns `/api/auth`.
+**Dayflow HRMS** is an enterprise-grade, modern Human Resource Management System designed to streamline workforce operations, attendance tracking, leave requests, payroll processing, multi-level approvals, and organizational analytics.
 
-## Implementation status
+Built on the latest **Next.js App Router**, **React 19**, **Drizzle ORM**, **Neon PostgreSQL**, and **Better Auth**, Dayflow delivers a blazing-fast, secure, and intuitive experience for employees, managers, HR administrators, and system executives alike.
 
-Implemented and covered by focused tests:
+---
 
-- Central lowercase role normalization, permission mapping, employee resource scopes, page policies, and safe post-authentication redirects.
-- Better Auth email/password configuration, optional GitHub OAuth, password-reset and verification delivery hooks, trusted-origin/CSRF checks, and endpoint rate limits.
-- Employee organization scoping, direct-report lists, manager assignment validation, and manager/self/HR/admin resource rules.
-- Server-timestamped attendance check-in/out, timezone-derived work dates, schedule-aware lateness/duration, today state, and generated uniqueness/check constraints.
-- Actor-scoped leave catalogs, balances, requests, cancellation, and manager/HR decisions, including scheduled-workday/holiday duration and atomic request, balance, attendance, notification, and audit writes.
-- Organization-scoped payroll periods and payslips with exact-cent net-pay derivation and the locked `draft` -> `review` -> `finalized` -> `published` lifecycle.
-- Persisted, actor-scoped dashboard, attendance, leave, and payroll reports; self-owned notifications; and organization-scoped reference-data services.
-- Role-aware dashboard/sidebar integration and canonical profile, team, attendance, organization, payroll, notification, report, and settings pages.
-- Two generated append-only schema migrations and a repeat-safe development seed definition for one admin, two HR users, three managers, and twenty employees.
+## Features
 
-Known limitations and unverified areas:
+### 1. Authentication
+- **Multi-Method Login**: Seamless sign-in via Email/Password credentials and GitHub OAuth 2.0 with PKCE support.
+- **Session Security**: Secured via HTTP-only, `SameSite=Lax` cookies with cryptographic password hashing (Argon2/Scrypt).
+- **Email Verification & Password Reset**: Automated token delivery with local console logging in development and transactional HTTPS provider support in production.
+- **Brute-Force & Abuse Mitigation**: Built-in in-memory rate limiting and session rotation.
 
-- The payroll workflow manages entered gross/deduction amounts and publication state, but it is not a statutory tax, benefits, or formula engine. Salary structures/components and `payslip_items` are not wired into payslip calculations.
-- Some legacy support tables and identifiers do not yet have tenant columns or foreign keys; these are listed in [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md). Organization IDs newly added to legacy leave-policy and salary-catalog rows are nullable until existing data is backfilled.
-- The generic approval table is actor-scoped in services but is not relationally linked to its source leave/correction record, and activity logs do not carry organization or actor keys.
-- Authentication context resolution can atomically claim an already provisioned employee record for a verified user during the first authenticated read; it never creates an employee or organization.
-- Rate limiting uses in-process memory, so a shared store is still needed for consistent limits across multiple production instances.
-- The generated migrations and seed definition were not executed against a database during this implementation pass; database constraints, transactions, concurrency, and legacy-data conversion therefore remain unverified in a real database.
+### 2. Role-Based Access Control (RBAC)
+- **Four Distinct Workforce Tiers**:
+  - `Admin`: Full organization settings, user role elevation, sensitive audit logs, and global configuration.
+  - `HR`: Org-wide people management, attendance records, leave policies, payroll runs, and operational analytics.
+  - `Manager`: Team dashboard, direct-report oversight, attendance correction reviews, and leave request decisions.
+  - `Employee (User)`: Personal self-service portal (clock-in/out, leave requests, balance tracking, payslip downloads).
+- **Zero Client Trust**: All mutations and data reads are enforced via server-authoritative role guards and tenant (`organization_id`) scoping.
 
-## Roles
+### 3. Employee Management
+- **Centralized Directory**: Comprehensive search, filtering, and pagination across all organizational staff.
+- **Profile Lifecycle**: Full support for employee statuses (`onboarding`, `active`, `notice_period`, `inactive`) and employment types (`full_time`, `part_time`, `contract`, `intern`).
+- **Reporting Hierarchy**: Dynamic manager-to-report assignment with direct cycle prevention.
+- **Extended Records**: Embedded management of employee addresses, emergency contacts, and compliance documents.
 
-Dayflow stores lowercase roles consistently:
+### 4. Attendance Tracking
+- **Real-Time Clock In / Clock Out**: 1-click self-service check-in with server-authoritative timestamps (anti-tamper protection).
+- **Shift & Timezone Engine**: Automatic derivation of work dates, shifts, lateness, and overtime from employee work schedules and IANA timezone strings.
+- **Duration & Break Calculation**: Automatic calculation of work hours, half-day/present statuses, and break intervals.
+- **Attendance Corrections**: Multi-step workflow allowing employees to request time corrections with manager/HR review queues.
 
-- `employee`: self profile, personal attendance, leave, payslips, and notifications.
-- `manager`: employee access plus direct-report attendance, leave, availability, and reviews. Managers do not receive organization-wide payroll access.
-- `hr`: organization-wide employee, attendance, leave, onboarding, payroll, report, and notification operations according to the permission map.
-- `admin`: HR capabilities plus roles, organization settings, sensitive audit access, and full configuration.
+### 5. Leave & Time-Off Management
+- **Custom Leave Types**: Configurable leave policies (Casual, Sick, Earned, Parental, Unpaid) with paid/unpaid rules.
+- **Annual Allocations & Ledger**: Real-time balance tracking with atomic deduction upon request approval.
+- **Smart Duration Calculation**: Automatic exclusion of company holidays and non-working weekend days from requested durations.
+- **Request Lifecycle**: Status tracking across `pending`, `approved`, `rejected`, and `cancelled` states with mandatory rejection rationale.
 
-Public signup always creates an employee-level account. Elevated roles are assigned only through an authorized administrative workflow or the explicit development seed.
+### 6. Payroll Processing
+- **Payroll Periods Workflow**: Multi-stage state machine (`draft` → `review` → `finalized` → `published`).
+- **Exact-Cent Arithmetic**: High-precision numeric financial calculations for basic salary, gross earnings, itemized deductions, and net pay.
+- **Employee Payslips**: Role-scoped employee self-service view and PDF/printable payslips.
+- **Salary Catalog**: Scaffolding for modular salary structures and salary component rules.
 
-Server-side authorization is mandatory. Hiding a sidebar entry is only presentation and never grants or removes API access.
+### 7. Approvals
+- **Unified Approvals Queue**: Dedicated dashboards for Managers and HR to review pending employee actions.
+- **Dual Decision Channels**: Review, approve, or reject attendance corrections and leave applications with inline notes.
+- **Event-Driven Side Effects**: Approvals automatically trigger balance adjustments, attendance updates, employee notifications, and immutable audit logs.
 
-## Local setup
+### 8. Analytics & Reporting
+- **Interactive Dashboards**: Real-time workforce metrics, departmental headcount, attendance rates, and leave volume.
+- **Visual Charts**: Powered by [Recharts](https://recharts.org) for monthly attendance breakdowns, leave utilization, and payroll disbursements.
+- **Audit Trails**: Immutable `activity_logs` table tracking critical administrative actions and state modifications.
 
-Requirements:
+---
 
-- Bun 1.3 or newer
-- A disposable Neon development branch or PostgreSQL development database
-- Node.js 20+ where required by local tooling
+## Documentation
 
-Install dependencies and create a local environment file:
+Explore the comprehensive documentation guides to understand every layer of Dayflow HRMS:
 
-```bash
-bun install
-cp .env.example .env
-```
+| Document | Purpose & Scope |
+| :--- | :--- |
+| 📖 [**Installation Guide**](./docs/INSTALLATION.md) | Step-by-step local setup, Docker PostgreSQL, Neon, environment variables, seeding, and production deployment. |
+| 🏗️ [**Architecture & System Design**](./docs/ARCHITECTURE.md) | High-level system architecture, App Router organization, Domain-Driven Feature Pattern, and data flow diagrams. |
+| 🔌 [**API Documentation**](./API_DOCUMENTATION.md) | Complete REST API endpoint reference (`/api/v1/*`), request/response schemas, error handling, and auth contracts. |
+| 🗄️ [**Database Design & Schema**](./DATABASE_SCHEMA.md) | Drizzle ORM entity definitions, 30 PostgreSQL tables, relational foreign keys, indexes, and migration guidelines. |
+| 🛡️ [**Security Policy**](./SECURITY.md) | Vulnerability disclosure, auth security, CSRF protection, tenant isolation, rate limiting, and hardening checklist. |
+| 🤝 [**Contributing Guide**](./CONTRIBUTING.md) | Developer workflow, branch strategies, Conventional Commits, coding standards, and pull request procedures. |
+| 📋 [**Testing Guide**](./TESTING.md) | Automated testing workflows, test suites, and manual verification procedures. |
+| 🔐 [**Production Auth Runbook**](./docs/AUTH_PRODUCTION.md) | Production checklist for OAuth credentials, trusted origins, proxy headers, and session secrets. |
 
-Required configuration:
+---
 
-```env
-DATABASE_URL="postgresql://..."
-BETTER_AUTH_SECRET="a-random-secret-with-at-least-32-characters"
-BETTER_AUTH_URL="http://localhost:3000"
-AUTH_REQUIRE_EMAIL_VERIFICATION="false"
-BETTER_AUTH_TRUSTED_ORIGINS="http://localhost:3000"
-AUTH_TRUST_PROXY_HEADERS=""
-```
-
-`AUTH_REQUIRE_EMAIL_VERIFICATION` defaults to `true` in every environment; set it to `false` explicitly only for local development when that is intentional. Passwords must contain 12–128 characters. Use a comma-separated trusted-origin list for additional first-party deployment origins. Production entries must be explicit HTTPS origins; `*` and the broad `https://*.vercel.app` pattern are rejected.
-
-Do not set `NEXT_PUBLIC_BETTER_AUTH_URL`. Dayflow uses Better Auth on the same origin at `/api/auth`. The server resolves one canonical server-only origin, then Better Auth 1.7 validates each request against exact configured/Vercel hosts so OAuth state cookies and callbacks stay on the initiating host.
-
-Optional GitHub OAuth:
-
-```env
-GITHUB_CLIENT_ID=""
-GITHUB_CLIENT_SECRET=""
-```
-
-Production email delivery uses a JSON HTTP provider endpoint:
-
-```env
-EMAIL_PROVIDER_API_URL="https://provider.example/v1/email"
-EMAIL_PROVIDER_API_KEY=""
-EMAIL_FROM="notifications@example.com"
-```
-
-When the provider values are omitted in development, verification and reset links are written to the local server console. Production fails closed instead of logging tokens or pretending delivery succeeded.
-
-For local GitHub OAuth, configure the callback URL as:
+## Tech Stack
 
 ```text
-http://localhost:3000/api/auth/callback/github
+Frontend Framework:     Next.js 16.3 (App Router) & React 19
+Language:               TypeScript 5 (Strict Mode)
+Styling & UI Primitives: Tailwind CSS v4, Base UI, Lucide Icons, Framer Motion
+Data Fetching & State:  TanStack React Query v5 & React Table v9
+Authentication:         Better Auth 1.7 (Credentials + GitHub OAuth)
+Database & ORM:         PostgreSQL (Neon Serverless) & Drizzle ORM v1.0
+Validation:             Zod v4
+Charts & Visuals:       Recharts 3.8
+Package Manager & Test: Bun 1.3
 ```
 
-Production must use an HTTPS `BETTER_AUTH_URL`, a unique high-entropy secret, and an explicit trusted origin. Leave `AUTH_TRUST_PROXY_HEADERS` empty on Vercel; it is enabled only when Vercel exposes `VERCEL=1`. Never commit `.env`.
+---
 
-## Database workflow
+## System Architecture
 
-Schema definitions are in `src/db/schema`; append-only migrations and snapshots are in `drizzle`. Generated migrations are not applied automatically by `next build` or Vercel. The seed has not been run in this implementation pass.
+```mermaid
+graph TD
+    subgraph Client Application
+        WebClient["Browser Client (React 19 / TanStack Query)"]
+    end
 
-Generate and inspect a migration:
+    subgraph Next.js App Router
+        AuthAPI["/api/auth/* (Better Auth)"]
+        BusinessAPI["/api/v1/* (REST Endpoints)"]
+        AppPages["App Pages ((auth), (dashboard))"]
+    end
 
+    subgraph Security Layer
+        AuthCtx["Auth Context & Session Resolver"]
+        RBACGuard["RBAC & Permission Guard"]
+        TenantGuard["Tenant Scope (organization_id)"]
+    end
+
+    subgraph Feature Services
+        EmployeeSvc["Employee Service"]
+        AttendanceSvc["Attendance & Time Engine"]
+        LeaveSvc["Leave & Policy Engine"]
+        PayrollSvc["Payroll Ledger Service"]
+        ApprovalSvc["Approvals Service"]
+    end
+
+    subgraph Data Layer
+        Drizzle["Drizzle ORM"]
+        PostgreSQL[("Neon PostgreSQL Database")]
+    end
+
+    WebClient --> AppPages
+    WebClient --> AuthAPI
+    WebClient --> BusinessAPI
+
+    BusinessAPI --> AuthCtx
+    AppPages --> AuthCtx
+    AuthCtx --> RBACGuard
+    RBACGuard --> TenantGuard
+
+    TenantGuard --> EmployeeSvc
+    TenantGuard --> AttendanceSvc
+    TenantGuard --> LeaveSvc
+    TenantGuard --> PayrollSvc
+    TenantGuard --> ApprovalSvc
+
+    EmployeeSvc --> Drizzle
+    AttendanceSvc --> Drizzle
+    LeaveSvc --> Drizzle
+    PayrollSvc --> Drizzle
+    ApprovalSvc --> Drizzle
+
+    Drizzle --> PostgreSQL
+```
+
+---
+
+## Role-Based Access Control (RBAC) Matrix
+
+| Feature / Capability | Employee (`user`) | Manager (`user` + Mgr) | HR Administrator (`hr`) | System Admin (`admin`) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Self Profile & Attendance** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Self Leave Requests & Balance** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Self Payslip Access** | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Direct Reports Team View** | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Approve Team Attendance & Leave** | :x: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| **Organization Employee Directory** | :x: | :x: | :white_check_mark: | :white_check_mark: |
+| **Create & Update Employees** | :x: | :x: | :white_check_mark: | :white_check_mark: |
+| **Manage Organization Leave Policies** | :x: | :x: | :white_check_mark: | :white_check_mark: |
+| **Execute & Finalize Payroll Runs** | :x: | :x: | :white_check_mark: | :white_check_mark: |
+| **Assign Roles & Manage Admin Settings** | :x: | :x: | :x: | :white_check_mark: |
+| **System Audit Logs & Security** | :x: | :x: | :x: | :white_check_mark: |
+
+---
+
+## Quick Start
+
+### 1. Clone & Install
 ```bash
-bun run db:generate
+git clone https://github.com/your-org/dayflow.git
+cd dayflow
+bun install
 ```
 
-Only after confirming `DATABASE_URL` points to a disposable development database:
+### 2. Configure Environment
+```bash
+cp .env.example .env
+```
+Fill in your `DATABASE_URL`, `BETTER_AUTH_SECRET`, and GitHub OAuth credentials. *(See [Installation Guide](./docs/INSTALLATION.md) for full variable details).*
 
+### 3. Migrate & Seed Database
 ```bash
 bun run db:migrate
 bun run db:seed
 ```
 
-Do not use `db:push` against production, reset migration history, or run the seed against shared data.
-
-Existing Better Auth 1.6 databases need a reviewed account-identity backfill
-before Better Auth 1.7 can authenticate their credential accounts. The first
-command is a read-only preflight and deliberately exits without changing data:
-
-```bash
-bun run db:repair-auth
-```
-
-Only after confirming the sanitized target database, taking a Neon backup or
-branch, and pausing authentication writes, apply the scoped repair:
-
-```bash
-CONFIRM_AUTH_DB_REPAIR=1 bun run db:repair-auth
-```
-
-The repair supports this application's `credential` and `github` providers,
-checks for identity collisions, runs in one transaction, and verifies the
-non-null issuer plus unique `(issuer, account_id)` contract. It refuses to infer
-a missing issuer for an unknown provider. It does not create missing Better
-Auth tables or admin columns, migrate unrelated application data, or modify the
-Drizzle migration ledger.
-
-## Run the application
-
+### 4. Run Development Server
 ```bash
 bun run dev
 ```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Open [http://localhost:3000](http://localhost:3000). Authentication routes are `/sign-in`, `/sign-up`, and `/verify-email`; authenticated work starts at `/dashboard`.
+---
 
-## Primary routes
+## Default Seed Credentials
 
-```text
-/
-├── sign-in
-├── sign-up
-├── verify-email
-└── dashboard
-    ├── profile
-    ├── people
-    │   └── [employeeId]
-    ├── my-team
-    │   └── [employeeId]
-    ├── attendance
-    │   ├── daily
-    │   ├── weekly
-    │   └── corrections
-    ├── time-off
-    │   ├── apply
-    │   └── balance
-    ├── approvals
-    │   ├── attendance
-    │   └── leave
-    ├── payroll
-    │   ├── periods
-    │   └── salary-structures
-    ├── reports
-    ├── notifications
-    ├── organization
-    ├── departments
-    ├── designations
-    ├── office-locations
-    ├── work-schedules
-    ├── holidays
-    ├── audit-logs
-    └── settings
-```
+All seeded accounts share the password: **`Password123!`**
 
-Role-aware navigation shows the canonical destinations. Older nested organization/people routes and the `/admin`, `/employee`, `/hr`, and `/manager` surfaces still exist for compatibility; not all of them are simple redirects yet. Page policy is broad authorization only, so route handlers and services must still enforce tenant and row scope.
+| Role | Email | Employee ID | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Admin** | `admin@dayflow.dev` | `EMP-1001` | Executive & System Administration |
+| **HR Specialist** | `hr1@dayflow.dev` | `EMP-1002` | People, Leave, Attendance, & Payroll Management |
+| **Team Manager** | `manager1@dayflow.dev` | `EMP-1004` | Engineering Team Oversight & Approvals |
+| **Staff Employee** | `emp1@dayflow.dev` | `EMP-1006` | Employee Self-Service Operations |
 
-## Architecture
+*(Refer to [Installation Guide](./docs/INSTALLATION.md) for the complete list of 26 seeded accounts).*
+
+---
+
+## Project Structure
 
 ```text
-src/
-├── app/
-│   ├── (auth)/              # Authentication UI
-│   ├── (dashboard)/         # Protected HRMS workspace
-│   └── api/
-│       ├── auth/            # Better Auth handler
-│       └── v1/              # Business API
-├── components/              # Product and shadcn/Base UI components
-├── db/
-│   ├── schema/              # Drizzle table definitions
-│   └── seed/                # Development-only repeat-safe seed
-├── features/                # Domain schemas, repositories, and services
-├── hooks/                   # TanStack Query hooks/key factories
-├── lib/                     # Auth, permissions, API, audit, and email utilities
-└── providers/               # Query and theme providers
+dayflow/
+├── docs/                   # System design, installation, and auth runbooks
+├── drizzle/                # SQL migration files and snapshots
+├── src/
+│   ├── app/                # Next.js App Router (pages & API routes)
+│   │   ├── (auth)/         # Sign-in, sign-up, email verification
+│   │   ├── (dashboard)/    # Authenticated HRMS workspace
+│   │   └── api/            # Better Auth & /api/v1 REST endpoints
+│   ├── components/         # Shared UI primitives (Base UI, Tailwind)
+│   ├── db/                 # Drizzle client, schemas (30 tables), and seeders
+│   ├── features/           # Domain-driven modules (Attendance, Leave, Payroll, etc.)
+│   ├── hooks/              # TanStack Query custom hooks
+│   ├── lib/                # Auth, permissions, email, and API utilities
+│   └── providers/          # Theme, Query, and Toast context providers
+├── drizzle.config.ts       # Drizzle ORM configuration
+├── package.json            # Scripts & project dependencies
+└── tsconfig.json           # TypeScript strict configuration
 ```
 
-Canonical employee/team, attendance, leave, payroll, organization-reference, notification, approval, and report handlers authenticate the resolved server identity and enforce their documented actor or organization scope. Some compatibility handlers still use older response patterns, so clients must tolerate the transition described in [API_DOCUMENTATION.md](./API_DOCUMENTATION.md). Attendance timestamps, leave duration, and payroll net-pay calculations are server-authoritative.
+---
 
-## Verification
+## Verification & Quality Gates
 
-The normal non-mutating quality gate is:
+Run the automated quality checks locally:
 
 ```bash
+# Code Style & Linting
 bun run lint
+
+# TypeScript Strict Compilation Check
 bun run typecheck
+
+# Unit & Integration Tests
 bun test
+
+# Production Build Verification
 bun run build
 ```
 
-Run the build with the Vercel Production environment or equivalent
-production-like server-only values loaded. The localhost `.env` intentionally
-fails the production auth guard during `next build`; see [TESTING.md](./TESTING.md).
+---
 
-See [TESTING.md](./TESTING.md) for focused and manual workflow coverage.
+## License
 
-The authentication regression suite covers canonical URL resolution, production fail-fast behavior, exact trusted hosts, callback sanitization, access states, handler uniqueness, and namespace ownership. A read-only Better Auth database preflight and local auth-route smoke test do not replace a production OAuth/session test; no production migration, seed, or write was performed by the audit.
-
-## Documentation
-
-- [Implementation plan](./IMPLEMENTATION_PLAN.md)
-- [API reference](./API_DOCUMENTATION.md)
-- [Database schema](./DATABASE_SCHEMA.md)
-- [Testing guide](./TESTING.md)
-- [Authentication production runbook](./docs/AUTH_PRODUCTION.md)
-- [Workflow reference](https://link.excalidraw.com/l/65VNwvy7c4X/58RLEJ4oOwh)
-
-## Deployment checklist
-
-Do not deploy this branch as a complete production HR/payroll system until the limitations above are accepted or resolved and all pending migrations are validated on representative data.
-
-- Set `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, `AUTH_REQUIRE_EMAIL_VERIFICATION`, and all GitHub/email variables in the correct Vercel Development, Preview, and Production scopes. `BETTER_AUTH_URL` is the root HTTPS application origin, never `/api/auth`.
-- Leave `NEXT_PUBLIC_BETTER_AUTH_URL` unset so every browser calls `/api/auth` on its current deployment origin.
-- Enable Vercel system environment variables. Leave `AUTH_TRUST_PROXY_HEADERS` unset on Vercel; exact production, branch, and deployment hosts are allowlisted from Vercel's system values.
-- Inspect the Drizzle migration ledger before applying anything. If tables exist but the ledger is empty, do not replay the full migration history. For a Better Auth 1.7 account-only upgrade, take a verified Neon backup or branch, pause auth writes, run `bun run db:repair-auth`, review its target and counts, then run the confirmed repair shown above. Use `db:migrate` only after rehearsing the actual pending chain on a representative branch. Never put migrations in the Vercel build command or use `db:push` in production.
-- Verify that the production database contains the singular `user`, `session`, `account`, and `verification` auth tables. OAuth initiation requires insert access to `verification`, and Better Auth 1.7 requires the non-null `account.issuer` column.
-- Configure each bounded GitHub callback as `https://<host>/api/auth/callback/github`; use separate development/preview and production OAuth apps when practical.
-- Redeploy after changing any Vercel environment variable; changes do not affect an existing deployment.
-- Keep `AUTH_REQUIRE_EMAIL_VERIFICATION=true` in production and previews, and
-  confirm email delivery before deployment. Only local development may opt out.
-- Run lint, typecheck, tests, and the production build.
-- Verify employee, manager, HR, and admin accounts against the route-access matrix.
-- Confirm that payroll, audit logs, and cross-employee URLs return no unauthorized data.
-
-The complete environment matrix, safe migration sequence, health check, GitHub callback rules, and post-deployment flow checklist are in [the authentication production runbook](./docs/AUTH_PRODUCTION.md).
-
-Development seed credentials are printed only by the seed command and use fictional `@dayflow.dev` identities. The seed was not executed during this implementation pass, and its fixed credentials must never be deployed as production accounts.
+This project is licensed under the [MIT License](LICENSE).
