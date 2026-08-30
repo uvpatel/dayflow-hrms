@@ -19,8 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import {
+  DEFAULT_AUTH_CALLBACK,
   createAbsoluteCallbackURL,
-  sanitizeCallbackPath,
 } from "@/lib/auth/redirects";
 import { Loader2Icon, Eye, EyeOff } from "lucide-react";
 
@@ -43,17 +43,14 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export function SignupForm({
   className,
-  callbackURL = "/auth/redirect",
   githubEnabled = false,
   initialError,
   ...props
 }: React.ComponentProps<"div"> & {
-  callbackURL?: string;
   githubEnabled?: boolean;
   initialError?: string;
 }) {
   const router = useRouter();
-  const safeCallbackURL = sanitizeCallbackPath(callbackURL);
   const [name, setName] = useState("");
   const [employeeNumber, setEmployeeNumber] = useState("");
   const [email, setEmail] = useState("");
@@ -127,7 +124,7 @@ export function SignupForm({
         email: email.trim(),
         password,
         callbackURL: createAbsoluteCallbackURL(
-          safeCallbackURL,
+          DEFAULT_AUTH_CALLBACK,
           window.location.origin,
         ),
       });
@@ -139,7 +136,7 @@ export function SignupForm({
       } else {
         router.replace(
           res.data?.token
-            ? safeCallbackURL
+            ? DEFAULT_AUTH_CALLBACK
             : `/verify-email?email=${encodeURIComponent(email.trim())}`,
         );
         router.refresh();
@@ -162,7 +159,7 @@ export function SignupForm({
       const res = await authClient.signIn.social({
         provider: "github",
         callbackURL: createAbsoluteCallbackURL(
-          safeCallbackURL,
+          DEFAULT_AUTH_CALLBACK,
           window.location.origin,
         ),
         errorCallbackURL: `${window.location.origin}/sign-up`,
@@ -201,7 +198,8 @@ export function SignupForm({
               </div>
 
               <FieldDescription className="rounded-md border border-muted bg-muted/40 p-3 text-center">
-                New accounts receive employee access. HR, manager, and admin access can only be assigned by an administrator.
+                New accounts receive user access. HR and admin access can only
+                be assigned by an administrator.
               </FieldDescription>
 
               {formError && (

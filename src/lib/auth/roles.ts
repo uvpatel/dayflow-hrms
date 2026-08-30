@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { employees, user as authUsers } from "@/db/schema";
 import type { Employee } from "@/db/schema/employees";
-import type { Role } from "@/lib/permissions";
+import { normalizeAccessRole, type Role } from "@/lib/permissions";
 
 async function updateLinkedRolePair(
   employee: Pick<Employee, "id" | "userId"> & { userId: string },
@@ -15,7 +15,7 @@ async function updateLinkedRolePair(
   const [updatedAuthUsers, updatedEmployees] = await db.batch([
     db
       .update(authUsers)
-      .set({ role, updatedAt })
+      .set({ role: normalizeAccessRole(role), updatedAt })
       .where(eq(authUsers.id, employee.userId))
       .returning({ id: authUsers.id }),
     db
@@ -100,7 +100,7 @@ export async function synchronizeAuthUserRole(
 ): Promise<void> {
   const [updated] = await db
     .update(authUsers)
-    .set({ role, updatedAt: new Date() })
+    .set({ role: normalizeAccessRole(role), updatedAt: new Date() })
     .where(eq(authUsers.id, userId))
     .returning({ id: authUsers.id });
 

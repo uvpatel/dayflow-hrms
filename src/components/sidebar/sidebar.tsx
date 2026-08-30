@@ -28,33 +28,25 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { useMe } from "@/hooks/use-me";
-
-type DayflowRole = "admin" | "hr" | "manager" | "employee";
-
-function normalizeRole(role?: string | null): DayflowRole {
-  const value = role?.toLowerCase();
-  if (value === "admin" || value === "hr" || value === "manager") {
-    return value;
-  }
-  return "employee";
-}
+import { normalizeAccessRole, normalizeRole } from "@/lib/permissions";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: me } = useMe();
   const role = normalizeRole(me?.employee?.role ?? me?.user.role);
+  const accessRole = me?.accessRole ?? normalizeAccessRole(role);
   const canReview = role === "manager" || role === "hr" || role === "admin";
   const canManagePeople = role === "hr" || role === "admin";
   const canManageOrganization = role === "hr" || role === "admin";
   const isAdmin = role === "admin";
 
   const roleLabel =
-    role === "admin"
+    accessRole === "admin"
       ? "Administrator"
-      : role === "hr"
+      : accessRole === "hr"
         ? "HR operations"
         : role === "manager"
-          ? "Manager workspace"
-          : "Employee workspace";
+          ? "User · manager permissions"
+          : "User workspace";
 
   const navMain: NavMainItem[] = [
     {
@@ -67,7 +59,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: "/employee",
       icon: Laptop,
       items: [
-        { title: "Employee Hub", url: "/employee" },
+        { title: "User Hub", url: "/employee" },
         ...(canReview ? [{ title: "Manager Hub", url: "/manager" }] : []),
         ...(canManagePeople ? [{ title: "HR Operations Hub", url: "/hr" }] : []),
         ...(isAdmin ? [{ title: "Admin Center", url: "/admin" }] : []),
@@ -109,8 +101,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       icon: CalendarCheck,
       items: [
         { title: "Overview", url: "/dashboard/attendance" },
-        { title: "Daily logs", url: "/dashboard/attendance/daily" },
-        { title: "Weekly timesheet", url: "/dashboard/attendance/weekly" },
+        ...(canReview
+          ? [
+              { title: "Daily logs", url: "/dashboard/attendance/daily" },
+              {
+                title: "Weekly timesheet",
+                url: "/dashboard/attendance/weekly",
+              },
+            ]
+          : []),
         { title: "Corrections", url: "/dashboard/attendance/corrections" },
       ],
     },
@@ -171,7 +170,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             ]
           : []),
         ...(isAdmin
-          ? [{ title: "Roles & permissions", url: "/dashboard/organization/roles" }]
+          ? [{ title: "Roles & permissions", url: "/dashboard/roles" }]
           : []),
       ],
     },
@@ -189,7 +188,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       url: "/dashboard/notifications",
       icon: Bell,
     },
-    ...(isAdmin
+    ...(canManagePeople
       ? [
           {
             title: "Audit logs",

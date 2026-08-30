@@ -1,16 +1,18 @@
-import { normalizeRole, type Role } from "@/lib/permissions";
+import {
+  normalizeAccessRole,
+  type AccessRole,
+} from "@/lib/permissions";
 
-const ROLE_LANDING_PATHS: Record<Role, string> = {
+const ROLE_LANDING_PATHS: Record<AccessRole, string> = {
   admin: "/admin",
-  hr: "/dashboard",
-  manager: "/dashboard",
-  employee: "/dashboard",
+  hr: "/hr",
+  user: "/employee",
 };
 
 /**
- * Resolves a post-authentication destination from a server-derived role.
- * Unknown or legacy Better Auth roles intentionally receive employee access.
+ * Resolves the shared password/GitHub callback destination from a
+ * server-derived role. Legacy employee and manager values use the user tier.
  */
 export function getRoleLandingPath(role: string | null | undefined): string {
-  return ROLE_LANDING_PATHS[normalizeRole(role)];
+  return ROLE_LANDING_PATHS[normalizeAccessRole(role)];
 }

@@ -144,7 +144,7 @@ export function PortalHeader({
             className="text-xs font-medium"
           >
             <UserRound className="size-3.5" />
-            Employee
+            User
           </Button>
 
           {canAccessManager && (

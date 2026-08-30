@@ -24,6 +24,7 @@ import {
   activityLogs,
 } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { normalizeAccessRole } from "@/lib/permissions";
 
 async function main() {
   if (
@@ -167,6 +168,7 @@ async function main() {
   const seededEmployees: { id: number; userId: string; role: string }[] = [];
 
   for (const u of usersList) {
+    const accessRole = normalizeAccessRole(u.role);
     // Upsert Auth User
     let [authUser] = await db.select().from(user).where(eq(user.email, u.email)).limit(1);
     if (!authUser) {
@@ -178,7 +180,7 @@ async function main() {
           email: u.email,
           employeeNumber: u.empNo,
           emailVerified: true,
-          role: u.role,
+          role: accessRole,
         })
         .returning();
 
@@ -186,7 +188,10 @@ async function main() {
     if (authUser.employeeNumber !== u.empNo) {
       [authUser] = await db
         .update(user)
-        .set({ employeeNumber: u.empNo, updatedAt: new Date() })
+        .set({
+          employeeNumber: u.empNo,
+          updatedAt: new Date(),
+        })
         .where(eq(user.id, authUser.id))
         .returning();
     }
@@ -239,7 +244,21 @@ async function main() {
         })
         .returning();
     }
-    seededEmployees.push({ id: empRecord.id, userId: authUser.id, role: u.role });
+
+    const employeeAccessRole = normalizeAccessRole(empRecord.role);
+    if (authUser.role !== employeeAccessRole) {
+      [authUser] = await db
+        .update(user)
+        .set({ role: employeeAccessRole, updatedAt: new Date() })
+        .where(eq(user.id, authUser.id))
+        .returning();
+    }
+
+    seededEmployees.push({
+      id: empRecord.id,
+      userId: authUser.id,
+      role: empRecord.role,
+    });
   }
 
   // Assign every regular employee to one of the three real managers.

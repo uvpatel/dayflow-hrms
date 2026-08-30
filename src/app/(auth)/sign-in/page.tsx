@@ -64,7 +64,6 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
     <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
       <div className="w-full max-w-sm md:max-w-4xl">
         <LoginForm
-          callbackURL={callbackURL}
           initialError={initialError}
           githubEnabled={Boolean(
             process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET,

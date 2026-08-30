@@ -14,7 +14,23 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/hooks/use-me";
-import { APP_ROLES, ROLE_PERMISSIONS, normalizeRole } from "@/lib/permissions";
+import {
+  APP_ACCESS_ROLES,
+  ROLE_PERMISSIONS,
+  normalizeAccessRole,
+  normalizeRole,
+  type AccessRole,
+  type Permission,
+} from "@/lib/permissions";
+
+const ACCESS_ROLE_PERMISSIONS: Record<
+  AccessRole,
+  readonly Permission[]
+> = {
+  admin: ROLE_PERMISSIONS.admin,
+  hr: ROLE_PERMISSIONS.hr,
+  user: ROLE_PERMISSIONS.employee,
+};
 
 function roleLabel(role: string) {
   return role === "hr" ? "HR" : `${role[0].toUpperCase()}${role.slice(1)}`;
@@ -29,6 +45,7 @@ export default function RolesPage() {
   const currentRole = normalizeRole(
     meQuery.data?.employee?.role ?? meQuery.data?.user.role,
   );
+  const currentAccessRole = normalizeAccessRole(currentRole);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -53,8 +70,11 @@ export default function RolesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Your effective role</CardTitle>
-          <CardDescription>This is resolved from your linked employee profile.</CardDescription>
+          <CardTitle>Your access role</CardTitle>
+          <CardDescription>
+            This is resolved from your linked employee profile and cannot be
+            selected during password or GitHub sign-in.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {meQuery.isLoading ? (
@@ -63,10 +83,15 @@ export default function RolesPage() {
             <p className="text-sm text-destructive">Your role could not be loaded. Refresh the page to try again.</p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
-              <Badge className="px-3 py-1 text-sm uppercase">{roleLabel(currentRole)}</Badge>
+              <Badge className="px-3 py-1 text-sm uppercase">
+                {roleLabel(currentAccessRole)}
+              </Badge>
               <span className="text-sm text-muted-foreground">
                 {ROLE_PERMISSIONS[currentRole].length} direct permissions
                 {currentRole === "admin" ? " plus full administrative access" : ""}
+                {currentRole === "manager"
+                  ? " including manager team permissions"
+                  : ""}
               </span>
             </div>
           )}
@@ -74,18 +99,25 @@ export default function RolesPage() {
       </Card>
 
       <section className="grid gap-4 md:grid-cols-2">
-        {APP_ROLES.map((role) => (
-          <Card key={role} className={role === currentRole ? "border-primary/40" : undefined}>
+        {APP_ACCESS_ROLES.map((role) => (
+          <Card
+            key={role}
+            className={role === currentAccessRole ? "border-primary/40" : undefined}
+          >
             <CardHeader className="flex-row items-start justify-between gap-3">
               <div>
                 <CardTitle className="text-lg">{roleLabel(role)}</CardTitle>
-                <CardDescription>{ROLE_PERMISSIONS[role].length} direct permissions</CardDescription>
+                <CardDescription>
+                  {ACCESS_ROLE_PERMISSIONS[role].length} base permissions
+                </CardDescription>
               </div>
-              {role === currentRole ? <Badge variant="secondary">Current role</Badge> : null}
+              {role === currentAccessRole ? (
+                <Badge variant="secondary">Current role</Badge>
+              ) : null}
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-2">
-                {ROLE_PERMISSIONS[role].map((permission) => (
+                {ACCESS_ROLE_PERMISSIONS[role].map((permission) => (
                   <Badge key={permission} variant="outline" className="font-normal capitalize">
                     {permissionLabel(permission)}
                   </Badge>

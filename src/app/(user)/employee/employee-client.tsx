@@ -145,6 +145,8 @@ export function EmployeeDashboardClient({
   const { data: payslips = [], isLoading: payslipsLoading, refetch: refetchPayslips } = useMyPayslips();
   const { data: correctionsData, isLoading: correctionsLoading, refetch: refetchCorrections } = useAttendanceCorrections();
   const { data: holidays = [], isLoading: holidaysLoading, refetch: refetchHolidays } = useHolidays();
+  const accessRole = me?.accessRole ?? "user";
+  const hasManagerPermissions = me?.employee?.role === "manager";
 
   // Mutations
   const checkInMutation = useCheckIn();
@@ -294,7 +296,7 @@ export function EmployeeDashboardClient({
   return (
     <div className="min-h-screen bg-muted/10 pb-16">
       <PortalHeader
-        portalTitle="Employee Workspace"
+        portalTitle="User Workspace"
         portalRole={userRole}
         badgeLabel="Self-Service Hub"
         description="Daily punch clock, leave applications, payroll slips, and profile details."
@@ -326,11 +328,16 @@ export function EmployeeDashboardClient({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight md:text-2xl">
-                  Welcome, {me?.employee?.firstName || me?.user.name || "Employee"}!
+                  Welcome, {me?.employee?.firstName || me?.user.name || "User"}!
                 </h1>
                 <Badge variant="outline" className="capitalize text-xs font-semibold">
-                  {me?.employee?.role || userRole}
+                  {accessRole}
                 </Badge>
+                {hasManagerPermissions ? (
+                  <Badge variant="secondary" className="text-xs">
+                    Manager permissions
+                  </Badge>
+                ) : null}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {me?.employee?.employeeNumber ? (
@@ -881,9 +888,9 @@ export function EmployeeDashboardClient({
                     </p>
                   </div>
                   <div className="rounded-lg border p-4 bg-muted/20">
-                    <p className="text-xs text-muted-foreground">System Role</p>
+                    <p className="text-xs text-muted-foreground">Access Role</p>
                     <p className="mt-1 text-sm font-semibold capitalize">
-                      {me?.employee?.role || userRole}
+                      {accessRole}
                     </p>
                   </div>
                   <div className="rounded-lg border p-4 bg-muted/20">

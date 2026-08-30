@@ -9,6 +9,21 @@ export const APP_ROLES = Object.values(ROLES);
 
 export type Role = (typeof APP_ROLES)[number];
 
+/**
+ * Public authentication tiers. Manager remains a workforce capability in the
+ * employee domain, while Better Auth and post-login routing expose only these
+ * three roles.
+ */
+export const ACCESS_ROLES = {
+  ADMIN: "admin",
+  HR: "hr",
+  USER: "user",
+} as const;
+
+export const APP_ACCESS_ROLES = Object.values(ACCESS_ROLES);
+
+export type AccessRole = (typeof APP_ACCESS_ROLES)[number];
+
 export type Permission =
   | "admin:all"
   | "self:read"
@@ -145,12 +160,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 
 /**
  * Converts database, Better Auth, and legacy role values to the four Dayflow
- * roles. Unknown values deliberately receive employee access.
+ * workforce roles. The public Better Auth `user` role is the employee tier.
+ * Unknown values deliberately receive employee access.
  */
 export function normalizeRole(role: unknown): Role {
   if (typeof role !== "string") return "employee";
 
   const candidate = role.trim().toLowerCase();
+  if (candidate === "user") return "employee";
   return isRole(candidate) ? candidate : "employee";
 }
 
@@ -159,6 +176,38 @@ export function isRole(role: unknown): role is Role {
     typeof role === "string" &&
     (APP_ROLES as readonly string[]).includes(role)
   );
+}
+
+export function isAccessRole(role: unknown): role is AccessRole {
+  return (
+    typeof role === "string" &&
+    (APP_ACCESS_ROLES as readonly string[]).includes(role)
+  );
+}
+
+/** Maps workforce roles to the only roles persisted by Better Auth. */
+export function normalizeAccessRole(role: unknown): AccessRole {
+  const workforceRole = normalizeRole(role);
+  if (workforceRole === "admin" || workforceRole === "hr") {
+    return workforceRole;
+  }
+  return "user";
+}
+
+/** Maps a public role-management choice to a valid employee-table role. */
+export function toWorkforceRole(role: AccessRole): Role {
+  return role === "user" ? "employee" : role;
+}
+
+/** Only administrators may grant elevated workforce capabilities. */
+export function canAssignWorkforceRole(
+  actorRole: unknown,
+  targetRole: unknown,
+): boolean {
+  if (!isRole(targetRole)) return false;
+  const actor = normalizeRole(actorRole);
+  if (actor === "admin") return true;
+  return actor === "hr" && targetRole === "employee";
 }
 
 export function getRolePermissions(role: unknown): Permission[] {

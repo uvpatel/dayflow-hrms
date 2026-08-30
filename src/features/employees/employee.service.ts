@@ -13,6 +13,7 @@ import { validateManagerAssignment } from "./employee.domain";
 import type { NewEmployee } from "@/db/schema/employees";
 import { organizationRepository } from "@/features/organization/organization.repository";
 import { updateEmployeeRole } from "@/lib/auth/roles";
+import { canAssignWorkforceRole } from "@/lib/permissions";
 
 export interface EmployeeListFilters {
   departmentId?: number;
@@ -44,6 +45,11 @@ export class EmployeeService {
       throw new NotFoundError(
         "No employee profile is linked to your user account",
         "EMPLOYEE_NOT_FOUND",
+      );
+    }
+    if (authContext.organizationId == null) {
+      throw new AuthorizationError(
+        "An organization is required to list employee profiles",
       );
     }
 
@@ -259,8 +265,10 @@ export class EmployeeService {
     if (authContext.role !== "admin" && authContext.role !== "hr") {
       throw new AuthorizationError("Only HR or administrators can create employees");
     }
-    if (data.role === "admin" && authContext.role !== "admin") {
-      throw new AuthorizationError("Only administrators can create an admin employee");
+    if (!canAssignWorkforceRole(authContext.role, data.role)) {
+      throw new AuthorizationError(
+        "Only administrators can assign elevated employee access",
+      );
     }
     if (!authContext.organizationId) {
       throw new BusinessRuleError("An organization is required to create an employee");
@@ -461,6 +469,7 @@ export class EmployeeService {
     return {
       user: authContext.user,
       employee: employeeProfile,
+      accessRole: authContext.accessRole,
     };
   }
 

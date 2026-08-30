@@ -81,22 +81,7 @@ export function isSecureProductionAuthOrigin(origin: string): boolean {
 export function resolveCanonicalAuthUrl(
   environment: AuthUrlEnvironment = process.env,
 ): string | undefined {
-  const candidates = [
-    environment.BETTER_AUTH_URL,
-    environment.VERCEL_PROJECT_PRODUCTION_URL,
-    environment.VERCEL_URL,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeAuthOrigin(candidate);
-    if (normalized) return normalized;
-  }
-
-  if (environment.NODE_ENV !== "production") {
-    return "http://localhost:3000";
-  }
-
-  return undefined;
+  return normalizeAuthOrigin(environment.BETTER_AUTH_URL);
 }
 
 function normalizeTrustedOriginPattern(
@@ -160,32 +145,7 @@ export function resolveTrustedOrigins(
     canonicalAuthUrl !== undefined &&
     isSecureProductionAuthOrigin(canonicalAuthUrl);
 
-  if (!isStrictProduction) {
-    origins.add("http://localhost:3000");
-    origins.add("http://127.0.0.1:3000");
-    origins.add("http://localhost:3001");
-  }
-
   if (canonicalAuthUrl) origins.add(canonicalAuthUrl);
-
-  for (const candidate of [
-    environment.VERCEL_PROJECT_PRODUCTION_URL,
-    environment.VERCEL_BRANCH_URL,
-    environment.VERCEL_URL,
-  ]) {
-    if (!unwrapEnvironmentValue(candidate)) continue;
-
-    const normalized = normalizeAuthOrigin(candidate);
-    if (
-      !normalized ||
-      (isProduction && !isSecureProductionAuthOrigin(normalized))
-    ) {
-      throw new Error(
-        "AUTH_CONFIGURATION_ERROR: A Vercel deployment URL is invalid or insecure.",
-      );
-    }
-    origins.add(normalized);
-  }
 
   const configuredOrigins =
     environment.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [];

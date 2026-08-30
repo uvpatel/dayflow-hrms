@@ -506,10 +506,16 @@ export default function OnboardingPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="employee">Employee</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="hr">HR</SelectItem>
-                        {isAdmin ? <SelectItem value="admin">Administrator</SelectItem> : null}
+                        <SelectItem value="employee">User</SelectItem>
+                        {isAdmin ? (
+                          <>
+                            <SelectItem value="manager">
+                              User with manager permissions
+                            </SelectItem>
+                            <SelectItem value="hr">HR</SelectItem>
+                            <SelectItem value="admin">Administrator</SelectItem>
+                          </>
+                        ) : null}
                       </SelectContent>
                     </Select>
                   </div>
@@ -517,7 +523,7 @@ export default function OnboardingPage() {
                 <p className="flex items-start gap-2 text-xs text-muted-foreground">
                   <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
                   Access roles are checked again by the server. Only an
-                  administrator can provision an administrator profile.
+                  administrator can grant elevated access.
                 </p>
               </section>
 

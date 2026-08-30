@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { User, Mail, Phone, Shield, Calendar, Loader2, Save } from "lucide-react";
+import { normalizeAccessRole } from "@/lib/permissions";
 
 export default function UserProfilePage() {
   const { data: session, isPending } = authClient.useSession();
@@ -23,7 +24,10 @@ export default function UserProfilePage() {
     ? `${me.employee.firstName} ${me.employee.lastName}`.trim()
     : user?.name ?? "";
   const displayPhone = phoneNumber ?? me?.employee?.phoneNumber ?? "";
-  const userRole = me?.employee?.role || (user as { role?: string })?.role || "employee";
+  const accessRole =
+    me?.accessRole ??
+    normalizeAccessRole((user as { role?: string })?.role);
+  const hasManagerPermissions = me?.employee?.role === "manager";
   const initials = displayName
     ? displayName.slice(0, 2).toUpperCase()
     : user?.email?.slice(0, 2).toUpperCase() || "U";
@@ -82,8 +86,13 @@ export default function UserProfilePage() {
             <div className="flex flex-wrap gap-2 justify-center pt-2">
               <Badge variant="outline" className="capitalize bg-primary/5 text-primary border-primary/20 gap-1 text-xs">
                 <Shield className="size-3" />
-                {userRole}
+                {accessRole}
               </Badge>
+              {hasManagerPermissions ? (
+                <Badge variant="secondary" className="text-xs">
+                  Manager permissions
+                </Badge>
+              ) : null}
               {user?.emailVerified && (
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs">
                   Verified
@@ -166,14 +175,14 @@ export default function UserProfilePage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="roleDisplay" className="text-xs font-medium">
-                    System Role
+                    Access Role
                   </Label>
                   <div className="relative">
                     <Shield className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
                     <Input
                       id="roleDisplay"
                       className="pl-9 text-sm bg-muted/40 capitalize"
-                      value={userRole}
+                      value={accessRole}
                       readOnly
                       disabled
                     />

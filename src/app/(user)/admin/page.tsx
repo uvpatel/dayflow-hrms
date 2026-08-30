@@ -5,11 +5,12 @@ import { user } from "@/db/schema/auth-schema";
 import { employees } from "@/db/schema/employees";
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import SearchUsers from "./SearchUser";
-import { removeRole, setRole } from "./_actions";
+import { setManagerCapability, setRole } from "./_actions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Shield, User as UserIcon } from "lucide-react";
+import { normalizeAccessRole } from "@/lib/permissions";
 
 type AdminDashboardProps = {
   searchParams: Promise<{
@@ -93,6 +94,7 @@ export default async function AdminDashboard({
       ) : (
         <div className="space-y-4">
           {usersList.map((u) => {
+            const accessRole = normalizeAccessRole(u.role);
             return (
               <Card key={u.id} className="overflow-hidden">
                 <CardHeader className="pb-3 flex flex-row items-center justify-between">
@@ -105,18 +107,23 @@ export default async function AdminDashboard({
                       {u.email}
                     </CardDescription>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`capitalize text-xs font-semibold ${
-                      u.role === "admin"
-                        ? "bg-primary/10 text-primary border-primary/20"
-                        : u.role === "hr"
-                        ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {u.role || "user"}
-                  </Badge>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`capitalize text-xs font-semibold ${
+                        accessRole === "admin"
+                          ? "bg-primary/10 text-primary border-primary/20"
+                          : accessRole === "hr"
+                          ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {accessRole}
+                    </Badge>
+                    {u.role === "manager" ? (
+                      <Badge variant="secondary">Manager permissions</Badge>
+                    ) : null}
+                  </div>
                 </CardHeader>
                 <CardContent className="pt-0 flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-6 py-3">
                   <div className="text-xs text-muted-foreground">
@@ -153,30 +160,38 @@ export default async function AdminDashboard({
 
                     <form action={setRole}>
                       <input type="hidden" name="id" value={u.id} />
-                      <input type="hidden" name="role" value="manager" />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        variant="outline"
-                        disabled={u.role === "manager"}
-                        className="text-xs h-8"
-                      >
-                        Make Manager
-                      </Button>
-                    </form>
-
-                    <form action={removeRole}>
-                      <input type="hidden" name="id" value={u.id} />
+                      <input type="hidden" name="role" value="user" />
                       <Button
                         type="submit"
                         size="sm"
                         variant="ghost"
-                        disabled={u.role === "employee"}
+                        disabled={accessRole === "user"}
                         className="text-xs h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                       >
-                        Make Employee
+                        Make User
                       </Button>
                     </form>
+
+                    {accessRole === "user" ? (
+                      <form action={setManagerCapability}>
+                        <input type="hidden" name="id" value={u.id} />
+                        <input
+                          type="hidden"
+                          name="enabled"
+                          value={u.role === "manager" ? "false" : "true"}
+                        />
+                        <Button
+                          type="submit"
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-8"
+                        >
+                          {u.role === "manager"
+                            ? "Remove manager permissions"
+                            : "Grant manager permissions"}
+                        </Button>
+                      </form>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>

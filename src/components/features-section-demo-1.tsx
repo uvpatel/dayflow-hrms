@@ -36,7 +36,7 @@ const grid = [
   {
     title: "Secure Authentication & Role-Based Access",
     description:
-      "Protect employee information with secure sign-in, email verification, GitHub authentication, and role-based access for employees, managers, HR officers, and administrators.",
+      "Protect employee information with secure sign-in, email verification, GitHub authentication, and Admin, HR, or User access enforced by the server.",
   },
   {
     title: "Employee Profile Management",

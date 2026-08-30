@@ -9,7 +9,9 @@ import {
   type Permission,
   getRolePermissions,
   hasPermission,
+  normalizeAccessRole,
   normalizeRole,
+  type AccessRole,
 } from "./permissions";
 import type { Employee } from "@/db/schema/employees";
 import {
@@ -32,6 +34,7 @@ export interface AuthContext {
   employee: Employee | null;
   organizationId: number | null;
   role: Role;
+  accessRole: AccessRole;
   permissions: Permission[];
 }
 
@@ -59,7 +62,7 @@ async function resolveEmployee(user: BetterAuthUser): Promise<Employee | null> {
 
   if (empByUserId) {
     const employeeRole = normalizeRole(empByUserId.role);
-    if (user.role !== employeeRole) {
+    if (user.role !== normalizeAccessRole(employeeRole)) {
       await synchronizeAuthUserRole(user.id, employeeRole);
     }
     return empByUserId;
@@ -164,6 +167,7 @@ export async function getAuthContext(
   // Auth's user role is deliberately not used as a fallback because the two
   // records can be temporarily out of sync during onboarding or demotion.
   const role = normalizeRole(employee?.role);
+  const accessRole = normalizeAccessRole(role);
 
   const organizationId = employee?.organizationId ?? null;
   const permissions = getRolePermissions(role);
@@ -174,6 +178,7 @@ export async function getAuthContext(
     employee,
     organizationId,
     role,
+    accessRole,
     permissions,
   };
 }

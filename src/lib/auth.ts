@@ -1,6 +1,5 @@
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin } from "better-auth/plugins/admin";
 import { after } from "next/server";
 import { db } from "@/db";
 import { employees } from "@/db/schema/employees";
@@ -12,15 +11,18 @@ import {
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { serverEnv } from "@/lib/env";
-import {
-  resolveAllowedAuthHosts,
-  resolveTrustedOrigins,
-} from "@/lib/auth/url";
+import { resolveTrustedOrigins } from "@/lib/auth/url";
 import {
   classifyAuthFailure,
   logAuthDiagnostic,
   logBetterAuthMessage,
 } from "@/lib/auth/diagnostics";
+import { isActiveUserBan } from "@/lib/auth/bans";
+import {
+  buildGithubEmployeeProfile,
+  forceDefaultAuthRole,
+  isGithubOAuthCallbackPath,
+} from "@/lib/auth/identity-policy";
 
 const isProduction = process.env.NODE_ENV === "production";
 const authSecret = serverEnv.BETTER_AUTH_SECRET;
@@ -48,41 +50,29 @@ const requireEmailVerification = readBooleanSetting(
 );
 
 const trustedOrigins = resolveTrustedOrigins();
-const allowedHosts = resolveAllowedAuthHosts();
 const trustProxyHeaders = readBooleanSetting(
   process.env.AUTH_TRUST_PROXY_HEADERS,
   process.env.VERCEL === "1",
   "AUTH_TRUST_PROXY_HEADERS",
 );
 
-// Better Auth 1.7 resolves only explicitly allowlisted request hosts. This is
-// what keeps a preview/custom-domain OAuth state cookie and its callback on the
-// same host. The canonical URL is still resolved once in lib/env.ts and is
-// always included in the allowlist.
-const baseURL = {
-  allowedHosts,
-  protocol: isProduction ? ("https" as const) : ("auto" as const),
-};
-
-const githubClientId = process.env.GITHUB_CLIENT_ID?.trim() || undefined;
-const githubClientSecret = process.env.GITHUB_CLIENT_SECRET?.trim() || undefined;
-
-if (Boolean(githubClientId) !== Boolean(githubClientSecret)) {
+function configurationError(message: string): never {
+  const error = new Error(`AUTH_CONFIGURATION_ERROR: ${message}`);
   logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
     stage: "init",
-    error: "GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must either both be configured or both be omitted.",
+    error,
   });
+  throw error;
 }
 
 const emailProviderUrl = process.env.EMAIL_PROVIDER_API_URL?.trim();
 const emailProviderKey = process.env.EMAIL_PROVIDER_API_KEY?.trim();
-const emailFrom = process.env.EMAIL_FROM?.trim() || "Dayflow <notifications@dayflow.dev>";
+const emailFrom = process.env.EMAIL_FROM?.trim();
 
 if (Boolean(emailProviderUrl) !== Boolean(emailProviderKey)) {
-  logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
-    stage: "init",
-    error: "EMAIL_PROVIDER_API_URL and EMAIL_PROVIDER_API_KEY must either both be configured or both be omitted.",
-  });
+  configurationError(
+    "EMAIL_PROVIDER_API_URL and EMAIL_PROVIDER_API_KEY must either both be configured or both be omitted.",
+  );
 }
 
 if (emailProviderUrl) {
@@ -94,28 +84,29 @@ if (emailProviderUrl) {
       parsedEmailProviderUrl.password ||
       (isProduction && parsedEmailProviderUrl.protocol !== "https:")
     ) {
-      logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
-        stage: "init",
-        error: "EMAIL_PROVIDER_API_URL should be a valid HTTPS URL in production.",
-      });
+      configurationError(
+        "EMAIL_PROVIDER_API_URL must be a valid HTTPS URL in production.",
+      );
     }
   } catch {
-    logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
-      stage: "init",
-      error: "EMAIL_PROVIDER_API_URL is not a valid URL.",
-    });
+    configurationError("EMAIL_PROVIDER_API_URL is not a valid URL.");
   }
+}
+
+if (isProduction && !requireEmailVerification) {
+  configurationError(
+    "AUTH_REQUIRE_EMAIL_VERIFICATION must be enabled in production.",
+  );
 }
 
 if (
   isProduction &&
   requireEmailVerification &&
-  (!emailProviderUrl || !emailProviderKey)
+  (!emailProviderUrl || !emailProviderKey || !emailFrom)
 ) {
-  logAuthDiagnostic("AUTH_CONFIGURATION_ERROR", {
-    stage: "init",
-    error: "Email verification is enabled, but EMAIL_PROVIDER_API_URL or EMAIL_PROVIDER_API_KEY is not configured.",
-  });
+  configurationError(
+    "Email verification is enabled, but EMAIL_PROVIDER_API_URL, EMAIL_PROVIDER_API_KEY, or EMAIL_FROM is not configured.",
+  );
 }
 
 function scheduleAuthEmail(
@@ -186,6 +177,13 @@ export const auth = betterAuth({
           input: z.string().trim().min(2).max(64),
         },
       },
+      role: {
+        type: ["admin", "hr", "user"],
+        required: true,
+        defaultValue: "user",
+        input: false,
+        returned: true,
+      },
     },
     validateUserInfo: async ({ user, source }) => {
       if (source.action !== "create-user") return;
@@ -204,6 +202,11 @@ export const auth = betterAuth({
         };
       }
 
+      // GitHub's verified email is sufficient for identity creation. A
+      // first-time OAuth identity is provisioned below with user-level access;
+      // pre-existing credential users are linked by Better Auth itself.
+      if (source.method === "oauth") return;
+
       const employeeNumber =
         typeof user.employeeNumber === "string"
           ? user.employeeNumber.trim().toUpperCase()
@@ -212,20 +215,18 @@ export const auth = betterAuth({
         eq(employees.email, email),
         isNull(employees.userId),
       ];
-      if (source.method === "email-password") {
-        if (!employeeNumber) {
-          logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
-            level: "warn",
-            stage: "validate-employee-number",
-            errorCode: "EMPLOYEE_ID_REQUIRED",
-          });
-          return {
-            error: "EMPLOYEE_ID_REQUIRED",
-            errorDescription: "A valid pre-issued employee ID is required.",
-          };
-        }
-        conditions.push(eq(employees.employeeNumber, employeeNumber));
+      if (!employeeNumber) {
+        logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
+          level: "warn",
+          stage: "validate-employee-number",
+          errorCode: "EMPLOYEE_ID_REQUIRED",
+        });
+        return {
+          error: "EMPLOYEE_ID_REQUIRED",
+          errorDescription: "A valid pre-issued employee ID is required.",
+        };
       }
+      conditions.push(eq(employees.employeeNumber, employeeNumber));
 
       const [eligibleEmployee] = await db
         .select({ id: employees.id })
@@ -233,19 +234,6 @@ export const auth = betterAuth({
         .where(and(...conditions))
         .limit(1);
       if (!eligibleEmployee) {
-        if (source.method === "oauth") {
-          logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
-            level: "warn",
-            stage: "validate-oauth-employee",
-            provider: "github",
-            errorCode: "NO_MATCHING_EMPLOYEE",
-          });
-          return {
-            error: "NO_MATCHING_EMPLOYEE",
-            errorDescription:
-              "No pre-registered employee profile was found for this GitHub account. Please contact HR.",
-          };
-        }
         logAuthDiagnostic("AUTH_EMPLOYEE_LINK_ERROR", {
           level: "warn",
           stage: "validate-credential-employee",
@@ -259,29 +247,73 @@ export const auth = betterAuth({
       }
     },
   },
-  plugins: [
-    admin({
-      // Public sign-up never grants elevated access. HR and admin roles are
-      // assigned only by an authorized server-side role-management flow or seed.
-      defaultRole: "employee",
-      adminRoles: ["admin"],
-    }),
-  ],
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => ({
+          data: forceDefaultAuthRole(user),
+        }),
+        after: async (createdUser, context) => {
+          if (!isGithubOAuthCallbackPath(context?.path)) return;
+
+          await db
+            .insert(employees)
+            .values(
+              buildGithubEmployeeProfile({
+                id: createdUser.id,
+                name: createdUser.name,
+                email: createdUser.email,
+              }),
+            )
+            // A pre-provisioned employee with the same verified email is
+            // claimed later by auth-context under the stored auth role. This
+            // avoids a select-then-insert race and never auto-elevates access.
+            .onConflictDoNothing({ target: employees.email });
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session) => {
+          const [authUser] = await db
+            .select({
+              banned: schema.user.banned,
+              banExpires: schema.user.banExpires,
+            })
+            .from(schema.user)
+            .where(eq(schema.user.id, session.userId))
+            .limit(1);
+
+          if (!authUser?.banned) return;
+
+          if (!isActiveUserBan(authUser)) {
+            await db
+              .update(schema.user)
+              .set({
+                banned: false,
+                banReason: null,
+                banExpires: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.user.id, session.userId));
+            return;
+          }
+
+          throw APIError.from("FORBIDDEN", {
+            code: "BANNED_USER",
+            message:
+              "You have been banned from this application. Please contact support if you believe this is an error.",
+          });
+        },
+      },
+    },
+  },
   socialProviders: {
-    ...(githubClientId && githubClientSecret
-      ? {
-          github: {
-            clientId: githubClientId,
-            clientSecret: githubClientSecret,
-            requireEmailVerification: true,
-            mapProfileToUser: (profile) => ({
-              name: profile.name || profile.login || "User",
-              email: profile.email,
-              image: profile.avatar_url,
-            }),
-          },
-        }
-      : {}),
+    github: {
+      clientId: serverEnv.GITHUB_CLIENT_ID,
+      clientSecret: serverEnv.GITHUB_CLIENT_SECRET,
+      requireEmailVerification: true,
+    },
   },
   account: {
     encryptOAuthTokens: true,
@@ -292,6 +324,10 @@ export const auth = betterAuth({
     storeStateStrategy: "cookie",
     accountLinking: {
       enabled: true,
+      disableImplicitLinking: false,
+      requireLocalEmailVerified: true,
+      allowDifferentEmails: false,
+      updateUserInfoOnLink: false,
     },
   },
   session: {
@@ -336,7 +372,7 @@ export const auth = betterAuth({
       });
     },
   },
-  ...(authSecret ? { secret: authSecret } : {}),
-  baseURL,
+  secret: authSecret,
+  baseURL: serverEnv.BETTER_AUTH_URL,
   trustedOrigins,
 });

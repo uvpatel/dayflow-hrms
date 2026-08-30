@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import type { Employee } from "@/db/schema/employees";
+import type { AccessRole } from "@/lib/permissions";
 
 export const meKeys = {
   all: ["me"] as const,
@@ -18,6 +19,7 @@ export interface MeData {
     image?: string | null;
   };
   employee: Employee | null;
+  accessRole: AccessRole;
 }
 
 export function useMe() {

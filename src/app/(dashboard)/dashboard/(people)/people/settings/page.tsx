@@ -40,7 +40,11 @@ import {
   useOrganization,
   useUpdateOrganization,
 } from "@/hooks/use-organization";
-import { hasPermission, normalizeRole } from "@/lib/permissions";
+import {
+  hasPermission,
+  normalizeAccessRole,
+  normalizeRole,
+} from "@/lib/permissions";
 import type { Organization } from "@/db/schema/organizations";
 
 type ResourceCardProps = {
@@ -228,6 +232,8 @@ export default function PeopleSettingsPage() {
   const currentRole = normalizeRole(
     meQuery.data?.employee?.role ?? meQuery.data?.user.role,
   );
+  const currentAccessRole =
+    meQuery.data?.accessRole ?? normalizeAccessRole(currentRole);
   const isAdmin = currentRole === "admin";
   const canManagePeople = hasPermission(currentRole, "employee:create");
   const canManageStructure =
@@ -375,7 +381,9 @@ export default function PeopleSettingsPage() {
               <p className="text-xs uppercase tracking-wide text-muted-foreground">
                 Your access
               </p>
-              <p className="mt-1 text-sm font-medium">{roleLabel(currentRole)}</p>
+              <p className="mt-1 text-sm font-medium">
+                {roleLabel(currentAccessRole)}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -402,8 +410,11 @@ export default function PeopleSettingsPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary" className="capitalize">
-                {roleLabel(currentRole)}
+                {roleLabel(currentAccessRole)}
               </Badge>
+              {currentRole === "manager" ? (
+                <Badge variant="outline">Manager permissions</Badge>
+              ) : null}
               {meQuery.data?.employee?.employmentStatus ? (
                 <Badge variant="outline" className="capitalize">
                   {meQuery.data.employee.employmentStatus.replaceAll("_", " ")}
@@ -578,7 +589,7 @@ export default function PeopleSettingsPage() {
                 <Button
                   className="mt-auto w-full"
                   variant="outline"
-                  render={<Link href="/dashboard/organization/roles" />}
+                  render={<Link href="/dashboard/roles" />}
                 >
                   Review access
                   <ChevronRight className="size-4" />

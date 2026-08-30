@@ -19,8 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import {
+  DEFAULT_AUTH_CALLBACK,
   createAbsoluteCallbackURL,
-  sanitizeCallbackPath,
 } from "@/lib/auth/redirects";
 import { Loader2Icon, Eye, EyeOff } from "lucide-react";
 
@@ -43,17 +43,14 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export function LoginForm({
   className,
-  callbackURL = "/auth/redirect",
   githubEnabled = false,
   initialError,
   ...props
 }: React.ComponentProps<"div"> & {
-  callbackURL?: string;
   githubEnabled?: boolean;
   initialError?: string;
 }) {
   const router = useRouter();
-  const safeCallbackURL = sanitizeCallbackPath(callbackURL);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -96,7 +93,7 @@ export function LoginForm({
         email: email.trim(),
         password,
         callbackURL: createAbsoluteCallbackURL(
-          safeCallbackURL,
+          DEFAULT_AUTH_CALLBACK,
           window.location.origin,
         ),
       });
@@ -110,7 +107,7 @@ export function LoginForm({
           res.error.message || "Invalid email or password. Please try again."
         );
       } else {
-        router.replace(safeCallbackURL);
+        router.replace(DEFAULT_AUTH_CALLBACK);
         router.refresh();
       }
     } catch (err: unknown) {
@@ -131,7 +128,7 @@ export function LoginForm({
       const res = await authClient.signIn.social({
         provider: "github",
         callbackURL: createAbsoluteCallbackURL(
-          safeCallbackURL,
+          DEFAULT_AUTH_CALLBACK,
           window.location.origin,
         ),
         errorCallbackURL: `${window.location.origin}/sign-in`,

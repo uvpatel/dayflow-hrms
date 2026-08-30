@@ -8,5 +8,5 @@ import { getRoleLandingPath } from "@/lib/auth/landing";
 export default async function AuthRedirectPage() {
   const context = await requirePageAuthContext(await headers());
 
-  redirect(getRoleLandingPath(context.role));
+  redirect(getRoleLandingPath(context.accessRole));
 }

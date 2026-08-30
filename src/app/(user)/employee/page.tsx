@@ -3,7 +3,7 @@ import { requirePageAuthContext } from "@/lib/auth/page";
 import { EmployeeDashboardClient } from "./employee-client";
 
 export const metadata = {
-  title: "Employee Workspace | Dayflow HRMS",
+  title: "User Workspace | Dayflow HRMS",
   description: "Personal workday pulse, time-off requests, attendance logs, and payroll records.",
 };
 

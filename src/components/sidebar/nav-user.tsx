@@ -80,7 +80,12 @@ export function NavUser({
   const displayEmail = user?.email || "";
   const displayAvatar =
     (user && "image" in user ? user.image : undefined) || fallbackUser?.avatar || "";
-  const displayRole = (me?.employee?.role || user?.role || fallbackUser?.role || "Employee").toUpperCase();
+  const displayRole = (
+    me?.accessRole ||
+    user?.role ||
+    fallbackUser?.role ||
+    "user"
+  ).toUpperCase();
   const initials = getInitials(displayName, displayEmail);
 
   const handleSignOut = async () => {
