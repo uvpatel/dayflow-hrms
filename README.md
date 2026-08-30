@@ -77,17 +77,36 @@ Built on the latest **Next.js App Router**, **React 19**, **Drizzle ORM**, **Neo
 
 ## Documentation
 
-Explore the comprehensive documentation guides to understand every layer of Dayflow HRMS:
+Explore the comprehensive documentation suite to understand every layer of Dayflow HRMS:
 
+### 📜 Core Documentation
 | Document | Purpose & Scope |
 | :--- | :--- |
 | 📖 [**Installation Guide**](./docs/INSTALLATION.md) | Step-by-step local setup, Docker PostgreSQL, Neon, environment variables, seeding, and production deployment. |
 | 🏗️ [**Architecture & System Design**](./docs/ARCHITECTURE.md) | High-level system architecture, App Router organization, Domain-Driven Feature Pattern, and data flow diagrams. |
+| 🤝 [**Contributing Guide**](./CONTRIBUTING.md) | Developer workflow, branch strategies, Conventional Commits, coding standards, and pull request procedures. |
+| 📋 [**Changelog**](./CHANGELOG.md) | Chronologically curated version history, feature additions, fixes, and release notes following Keep a Changelog. |
+
+### 🛡️ Governance & Security
+| Document | Purpose & Scope |
+| :--- | :--- |
+| 📜 [**Code of Conduct**](./CODE_OF_CONDUCT.md) | Community pledge, behavioral standards, and reporting guidelines based on Contributor Covenant v2.1. |
+| 🛡️ [**Security Policy**](./SECURITY.md) | Vulnerability disclosure, auth security, CSRF protection, tenant isolation, rate limiting, and hardening checklist. |
+| 💬 [**Help & Support**](./SUPPORT.md) | Community forums, GitHub Discussions, Discord channels, and troubleshooting assistance. |
+
+### 🗺️ Management & Legal
+| Document | Purpose & Scope |
+| :--- | :--- |
+| 🏛️ [**Project Governance**](./GOVERNANCE.md) | Leadership framework, maintainer responsibilities, consensus models, and RFC decision-making processes. |
+| 🗺️ [**Product Roadmap**](./ROADMAP.md) | Upcoming quarterly milestones, mobile PWA, biometric hardware sync, and statutory payroll goals. |
+| ⚖️ [**License (MIT)**](./LICENSE) | Official open-source MIT legal permissions and warranty terms. |
+
+### ⚙️ Technical References
+| Document | Purpose & Scope |
+| :--- | :--- |
 | 🔌 [**API Documentation**](./API_DOCUMENTATION.md) | Complete REST API endpoint reference (`/api/v1/*`), request/response schemas, error handling, and auth contracts. |
 | 🗄️ [**Database Design & Schema**](./DATABASE_SCHEMA.md) | Drizzle ORM entity definitions, 30 PostgreSQL tables, relational foreign keys, indexes, and migration guidelines. |
-| 🛡️ [**Security Policy**](./SECURITY.md) | Vulnerability disclosure, auth security, CSRF protection, tenant isolation, rate limiting, and hardening checklist. |
-| 🤝 [**Contributing Guide**](./CONTRIBUTING.md) | Developer workflow, branch strategies, Conventional Commits, coding standards, and pull request procedures. |
-| 📋 [**Testing Guide**](./TESTING.md) | Automated testing workflows, test suites, and manual verification procedures. |
+| 🧪 [**Testing Guide**](./TESTING.md) | Automated testing workflows, test suites, and manual verification procedures. |
 | 🔐 [**Production Auth Runbook**](./docs/AUTH_PRODUCTION.md) | Production checklist for OAuth credentials, trusted origins, proxy headers, and session secrets. |
 
 ---
