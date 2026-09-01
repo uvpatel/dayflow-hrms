@@ -84,6 +84,7 @@ Explore the comprehensive documentation suite to understand every layer of Dayfl
 | :--- | :--- |
 | 📖 [**Installation Guide**](./docs/INSTALLATION.md) | Step-by-step local setup, Docker PostgreSQL, Neon, environment variables, seeding, and production deployment. |
 | 🏗️ [**Architecture & System Design**](./docs/ARCHITECTURE.md) | High-level system architecture, App Router organization, Domain-Driven Feature Pattern, and data flow diagrams. |
+| 🚀 [**Production System Design**](./docs/SYSTEM_DESIGN_IMPLEMENTATION.md) | Reliability endpoints, scaling phases, consistency rules, observability targets, and deployment checklist. |
 | 🤝 [**Contributing Guide**](./CONTRIBUTING.md) | Developer workflow, branch strategies, Conventional Commits, coding standards, and pull request procedures. |
 | 📋 [**Changelog**](./CHANGELOG.md) | Chronologically curated version history, feature additions, fixes, and release notes following Keep a Changelog. |
 
